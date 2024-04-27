@@ -20,19 +20,6 @@
  * Definitions
  ******************************************************************************/
 
-#if WIFI
-#include <WiFi.h>
-#include <WiFiClient.h>
-
-#include "passwords.h"
-
-#endif // #if WIFI
-
-#if WEBSERVER
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#endif // #if WEBSERVER
-
 /*******************************************************************************
  * Variables
  ******************************************************************************/

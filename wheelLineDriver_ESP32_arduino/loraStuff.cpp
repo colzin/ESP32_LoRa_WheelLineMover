@@ -204,12 +204,12 @@ void loraStuff_radioPoll(void)
     }
 #endif // #if REG_DUMP_POLL_ITVL_MS
 
-    // if (RF_IDLE == Radio.GetStatus())
-    // {
-    //     Serial.println(" Detected radio idle, starting infinite RX until next packet");
-    //     g_expectingReply = false;
-    //     Radio.Rx(0);
-    // }
+    if (RF_IDLE == Radio.GetStatus())
+    {
+        Serial.println(" Detected radio idle, starting infinite RX until next packet");
+        g_expectingReply = false;
+        Radio.Rx(0);
+    }
     uint32_t ms_now = millis();
 
     if (utils_elapsedU32Ticks(g_lastRx_ms, ms_now) > MSEC_TO_RESET_RX)

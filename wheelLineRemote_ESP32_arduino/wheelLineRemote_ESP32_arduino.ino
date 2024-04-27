@@ -119,7 +119,7 @@ void loop()
 
   if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
   {
-    Serial.printf("Sending machine state %d\n", globalInts_getMachineState());
+    Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
     packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState());
     g_lastMachStateSend_ms = millis();
   }
