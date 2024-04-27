@@ -1,16 +1,16 @@
 
 #include "Arduino.h"
 
-#include "defines.h" // Controls compile and runtime
-
-#include "ESP32_Mcu.h"
-#include "esp_system.h"
-#include "globalInts.h" // For machine state
+#include "defines.h"
 #include "loraStuff.h"
 #include "oledStuff.h"
 #include "packetParser.h"
 #include "pinStuff.h"
 #include "utils.h"
+
+#include "ESP32_Mcu.h"
+
+#include "esp_system.h"
 
 #include "serialInput.h"
 
@@ -44,8 +44,6 @@ static uint64_t g_chipID;
 #define TASK_WDT_TIMEOUT_SEC 5 // Wait this long before WDT panic
 #endif                         // #if USE_TASK_WATCHDOG
 
-static uint32_t g_lastMachStateSend_ms;
-
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -53,7 +51,7 @@ static uint32_t g_lastMachStateSend_ms;
 void setup()
 {
   Serial.begin(SERIAL_BAUD_RATE);
-  Serial.println("WheelLineRemote start");
+  Serial.println("WheelLineDriver start");
   Mcu.begin();
   pinStuff_setLED(led_weak);
   pinStuff_initButtons();
@@ -116,14 +114,15 @@ void loop()
 #if LORA
   loraStuff_radioPoll();
   packetParser_poll();
-
-  if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
-  {
-    Serial.printf("Sending machine state %d\n", globalInts_getMachineState());
-    packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState());
-    g_lastMachStateSend_ms = millis();
-  }
 #endif // #if LORA
+
+#if WEBSERVER
+  server.handleClient();
+#endif // #if WEBSERVER
+
+#if MQTT
+  mqttStuff_poll();
+#endif // #if MQTT
 
   oledStuff_printersPoll();
   pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant

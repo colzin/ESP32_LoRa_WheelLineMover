@@ -60,9 +60,9 @@
 #define LORA_FREQ_HOP_ON 0           // 1 to enable, 0 to disable
 #define LORA_IQ_INVERSION_ON 0       // 1 to enable, 0 to disable
 #define LORA_RX_CONTINUOUS false     // false for single mode, true for continuous RX
-#define LORA_TX_TIMEOUT 3000         // Transmission timeout [ms]
+#define LORA_TX_TIMEOUT 300          // Transmission timeout [ms]
 
-#define RX_AFTER_TX_MS 1000 // How long to wait for an ACK after a TX packet
+#define AWAIT_ACK_MS (110 + LORA_TX_TIMEOUT) // How long to wait for an ACK after a TX packet
 
 #define MSEC_TO_RESET_RX 32000 // Probes should report every 30 sec
 
@@ -130,19 +130,19 @@ static void onRxTimeout(void)
         g_expectingReply = false;
         // Serial.println("Set g_expectingReply false");
     }
-    Radio.Rx(0); // Send back to RX forever
-    Serial.printf("RxTimeout, going to RX for next packet at %d\n", millis());
+    Radio.Sleep(); // Leave in sleep
+    Serial.printf("RxTimeout, idling at %d\n", millis());
 }
 static void onTxDone(void)
 {
-    // Since we are hub, always Rx indefinitely to listen to ACKs or other senders
-    Radio.Rx(0); // Rx forever for next packet
-    Serial.printf("onTxDone, going to RX forever at %d\n", millis());
+    // Since we just sent, we may want a reply
+    Radio.Rx(AWAIT_ACK_MS); // Rx for ACK
+    Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
 }
 static void onTxTimeout(void)
 {
-    Radio.Rx(0); // Send back to RX forever
-    Serial.printf("onTxTimeout, going to RX forever at %d\n", millis());
+    Radio.Sleep();
+    Serial.printf("onTxTimeout, going to sleep at %d\n", millis());
 }
 
 static void dumpRegs(uint16_t startAddr, uint16_t len)
@@ -279,10 +279,12 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     }
     if (utils_elapsedU32Ticks(g_lastRx_ms, millis()) < 100)
     {
+        Serial.printf("<100ms since RX, need to wait\n");
         return sendFail_needToWait;
     }
     if (g_expectingReply)
     {
+        // Serial.println("Expecting reply, wait"); Happens all the time
         return sendFail_awaitingReply;
     }
     RadioState_t radioState = Radio.GetStatus();
@@ -295,6 +297,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         break;
     case RF_TX_RUNNING:
         // Don't print error, this is fine, retry later.
+        Serial.println("TX already running");
         return sendFail_txAlreadyRunning;
         break;
     case RF_RX_RUNNING:
@@ -321,5 +324,6 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         return sendFail_inOtherState;
         break;
     }
+    Serial.println("SendFail_ERROR?");
     return sendFail_error;
 }

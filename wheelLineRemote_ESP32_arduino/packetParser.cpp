@@ -171,8 +171,9 @@ static void parseMachstateV1Packet(rxPacket_t *pkt)
     }
     machStateV1Packet_t data;
     // Read the fields into the struct
+    pkt->pData = ReadBEUint8(pkt->pData, &data.seqNo);
     pkt->pData = ReadBEUint8(pkt->pData, &data.machState);
-    Serial.printf("  Machine state%d\n", data.machState);
+    Serial.printf("  Seq no %d, Machine state %d\n", data.seqNo, data.machState);
 #if PACKET_PRINT_TO_OLED
     oledStuff_printMachStateV1Packet(pkt, &data);
 #endif // #if PACKET_PRINT_TO_OLED
@@ -233,7 +234,7 @@ void packetParser_parseLoRaData(const uint8_t *pData, const uint16_t dataLen, co
         parseMachstateV1Packet(&thisRXPkt);
         savePacket = true; // We are the hub, and need to ACK these packets
         break;
-        
+
     default:
         savePacket = false;
         Serial.printf(" Don't know how to parse pktType of %d, len %d, ignoring\n", thisRXPkt.pktType, thisRXPkt.packetLen);
@@ -302,6 +303,23 @@ static void sendAckPacket(rxPacket_t *pPacketToAck)
     ptr = WriteBEInt8(ptr, pPacketToAck->rxSNR);
     enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), true);
     Serial.printf("Enqueued ack packet to 0x%08x%08x seq no %d, received with RSSI %d, SNR %d\n", (uint32_t)(pPacketToAck->uuid64 >> 32), (uint32_t)(pPacketToAck->uuid64), pPacketToAck->seqNo, pPacketToAck->rxRSSI, pPacketToAck->rxSNR);
+}
+
+bool packetParser_sendMachStateV1Packet(uint8_t machState)
+{
+    uint8_t txPacket[PACKET_HEADER_SIZE + MACHSTATE_V1_PKTLEN_BYTES];
+    uint8_t *ptr = populateHeaderMinusLen(txPacket, packetType_machStateV1);
+    // We put in our length
+    ptr = WriteBEUint16(ptr, MACHSTATE_V1_PKTLEN_BYTES);
+    // Set our packet's bytes
+    ptr = WriteBEUint8(ptr, g_seqNoToBeAcked++);
+    ptr = WriteBEUint8(ptr, machState);
+    bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), true);
+    if (!ret)
+    {
+        Serial.printf("FAILED to enqueue machStateV1 packet!\n");
+    }
+    return ret;
 }
 
 #define SEND_ERR_PRINT_ITVL_MS 500

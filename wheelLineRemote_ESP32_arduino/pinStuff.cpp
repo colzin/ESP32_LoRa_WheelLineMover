@@ -94,6 +94,17 @@ void pinStuff_initButtons(void)
   }
 }
 
+static bool checkToStart(void)
+{
+  if (isPressed(BUTTON_START_PIN))
+  {
+    Serial.println("Moving to START state");
+    globalInts_setMachineState(machState_startEngine);
+    return true;
+  }
+  return false;
+}
+
 void pinStuff_pollButtons(void)
 {
   // Get button states
@@ -102,11 +113,7 @@ void pinStuff_pollButtons(void)
   {
   case machState_justPoweredOn:
   case machState_killEngine:
-    if (isPressed(BUTTON_START_PIN))
-    {
-      Serial.println("Moving to START state");
-      globalInts_setMachineState(machState_startEngine);
-    }
+    checkToStart();
     break;
   case machState_startEngine:
     if (!isPressed(BUTTON_START_PIN))
@@ -116,10 +123,8 @@ void pinStuff_pollButtons(void)
     }
     break;
   case machState_runEngineHydIdle:
-    if (isPressed(BUTTON_START_PIN))
+    if (checkToStart())
     {
-      Serial.println("Moving to START state");
-      globalInts_setMachineState(machState_startEngine);
     }
     else if (isPressed(BUTTON_FWD_PIN))
     {
@@ -133,6 +138,9 @@ void pinStuff_pollButtons(void)
     }
     break;
   case machState_runEngineHydFwd:
+    if (checkToStart())
+    {
+    }
     if (!isPressed(BUTTON_FWD_PIN))
     {
       Serial.println("FWD released, engine HYD idle");
@@ -140,6 +148,9 @@ void pinStuff_pollButtons(void)
     }
     break;
   case machState_runEngineHydRev:
+    if (checkToStart())
+    {
+    }
     if (!isPressed(BUTTON_REV_PIN))
     {
       Serial.println("REV released, engine HYD idle");

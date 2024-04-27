@@ -63,9 +63,9 @@ extern "C"
         typedef struct
         {
                 uint8_t machState;
+                uint8_t seqNo; // Sequence number of this packet
         } machStateV1Packet_t;
-#define MACHSTATE_V1_PKTLEN_BYTES 1
-
+#define MACHSTATE_V1_PKTLEN_BYTES (1 + 1)
 
 #ifdef __cplusplus
 }
