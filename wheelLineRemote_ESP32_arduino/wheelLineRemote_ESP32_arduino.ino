@@ -6,6 +6,7 @@
 #include "ESP32_Mcu.h"
 #include "esp_system.h"
 #include "globalInts.h" // For machine state
+#include "lis2dh.h"     // for accelerometer on REMOTE ONLY
 #include "loraStuff.h"
 #include "oledStuff.h"
 #include "packetParser.h"
@@ -19,19 +20,6 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
-
-#if WIFI
-#include <WiFi.h>
-#include <WiFiClient.h>
-
-#include "passwords.h"
-
-#endif // #if WIFI
-
-#if WEBSERVER
-#include <WebServer.h>
-#include <ESPmDNS.h>
-#endif // #if WEBSERVER
 
 /*******************************************************************************
  * Variables
@@ -55,8 +43,6 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("WheelLineRemote start");
   Mcu.begin();
-  pinStuff_setLED(led_weak);
-  pinStuff_initButtons();
   g_chipID = ESP.getEfuseMac();
   Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(g_chipID >> 32), (uint32_t)g_chipID);
   Serial.printf("ESP32 Chip model = %s Rev %d, %d cores\n", ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores());
@@ -64,6 +50,10 @@ void setup()
   // Serial.printf("\nROM_core0 reason %d, ROM_core1 reason %d, rtc_0 reason %d, RTC_1 reason %d\n",
   //                 esp_rom_get_reset_reason(0), esp_rom_get_reset_reason(1), rtc_get_reset_reason(0), rtc_get_reset_reason(1));
 
+  pinStuff_setLED(led_weak);
+  pinStuff_initButtons();
+
+  lis2dh_init();
   oledStuff_displayInit();
 
   // oledStuff_printESPInfo(ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getFlashChipSize(), g_chipID);
@@ -116,6 +106,8 @@ void loop()
 #if LORA
   loraStuff_radioPoll();
   packetParser_poll();
+
+  lis2dh_poll();
 
   if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
   {

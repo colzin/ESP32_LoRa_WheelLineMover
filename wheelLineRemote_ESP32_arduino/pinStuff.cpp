@@ -11,9 +11,9 @@
  ******************************************************************************/
 
 // GPIOs for buttons
-#define BUTTON_START_PIN GPIO_NUM_0 // GPIO0 is USER_KEY, TODO put in 3 buttons (start, FWD, Rev)
-#define BUTTON_REV_PIN GPIO_NUM_33
-#define BUTTON_FWD_PIN GPIO_NUM_34
+#define BUTTON_START_PIN GPIO_NUM_0 // GPIO0 is USER_KEY on dev board, and must be high to boot.
+#define BUTTON_FWD_PIN GPIO_NUM_33
+#define BUTTON_REV_PIN GPIO_NUM_34
 
 /*******************************************************************************
  * Variables
@@ -81,17 +81,37 @@ void pinStuff_releaseVEXT(uint8_t bitsToClear)
 
 void pinStuff_initButtons(void)
 {
+#if PIN_CONFIG_WORKS
   gpio_config_t pinCfg;
   pinCfg.intr_type = GPIO_INTR_DISABLE;
   pinCfg.mode = GPIO_MODE_INPUT;
-  pinCfg.pin_bit_mask = (1U << BUTTON_START_PIN) | (1U << BUTTON_FWD_PIN) | (1U << BUTTON_REV_PIN);
+  // pinCfg.pin_bit_mask = (1U << BUTTON_START_PIN) | (1U << BUTTON_FWD_PIN) | (1U << BUTTON_REV_PIN); Seems to not work.
   pinCfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
   pinCfg.pull_up_en = GPIO_PULLUP_ENABLE; // Even if HW pullup, pull all up
+  pinCfg.pin_bit_mask = (1U << BUTTON_START_PIN);
   esp_err_t ret = gpio_config(&pinCfg);
   if (ESP_OK != ret)
   {
-    Serial.printf("gpio_config error 0x%x\n", ret);
+    Serial.printf("gpio_config pin %d error 0x%x\n", pinCfg.pin_bit_mask, ret);
   }
+  pinCfg.pin_bit_mask = (BUTTON_FWD_PIN);
+  ret = gpio_config(&pinCfg);
+  if (ESP_OK != ret)
+  {
+    Serial.printf("gpio_config pin %d error 0x%x\n", pinCfg.pin_bit_mask, ret);
+  }
+  pinCfg.pin_bit_mask = (BUTTON_REV_PIN);
+  ret = gpio_config(&pinCfg);
+  if (ESP_OK != ret)
+  {
+    Serial.printf("gpio_config pin %d error 0x%x\n", pinCfg.pin_bit_mask, ret);
+  }
+#else
+  *((uint32_t *)GPIO_PIN_REG_0) = 0x9B00; // Enable filter, select function 1, enable input, pull up
+  *((uint32_t *)GPIO_PIN_REG_33) = 0x9B00;
+  *((uint32_t *)GPIO_PIN_REG_34) = 0x9B00;
+#endif // #if PIN_CONFIG_WORKS
+  Serial.printf("\nConfig for START: 0x%x, FWD: 0x%x, REV: 0x%x\n\n", *((uint32_t *)GPIO_PIN_REG_0), *((uint32_t *)GPIO_PIN_REG_33), *((uint32_t *)GPIO_PIN_REG_34));
 }
 
 static bool checkToStart(void)
