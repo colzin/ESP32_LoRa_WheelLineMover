@@ -50,8 +50,8 @@ void setup()
   // Serial.printf("\nROM_core0 reason %d, ROM_core1 reason %d, rtc_0 reason %d, RTC_1 reason %d\n",
   //                 esp_rom_get_reset_reason(0), esp_rom_get_reset_reason(1), rtc_get_reset_reason(0), rtc_get_reset_reason(1));
 
+  pinStuff_init();
   pinStuff_setLED(led_weak);
-  pinStuff_initButtons();
 
   lis2dh_init();
   oledStuff_displayInit();
@@ -66,23 +66,6 @@ void setup()
 
 #endif // #if LORA
 
-#if BATT_MACHSTATE_PRINT_TO_OLED
-
-  // analogSetClockDiv(255); // 1338mS
-  //  analogSetCycles(8);                    // Set number of cycles per sample, default is 8 and provides an optimal result, range is 1 - 255
-  //  analogSetSamples(1);                   // Set number of samples in the range, default is 1, it has an effect on sensitivity has been multiplied
-  analogSetClockDiv(1);                 // Set the divider for the ADC clock, default is 1, range is 1 - 255
-  analogSetAttenuation(ADC_11db);       // Sets the input attenuation for ALL ADC inputs, default is ADC_11db, range is ADC_0db, ADC_2_5db, ADC_6db, ADC_11db
-  analogSetPinAttenuation(1, ADC_11db); // Sets the input attenuation, default is ADC_11db, range is ADC_0db, ADC_2_5db, ADC_6db, ADC_11db
-
-  if (!adcAttachPin(1)) // GPIO1 is ADC input
-  {
-    Serial.printf("ADCATTACH 1 failed\n");
-  }
-  // adcAttachPin(37);
-
-#endif // #if BATT_MACHSTATE_PRINT_TO_OLED
-
 #if USE_TASK_WATCHDOG
   Serial.println("Configuring WDT...");
   esp_task_wdt_init(TASK_WDT_TIMEOUT_SEC, true); // enable panic so ESP32 restarts
@@ -96,7 +79,7 @@ void loop()
 {
   pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
 
-  pinStuff_pollButtons(); // Read HW buttons
+  pinStuff_poll(); // Read HW buttons
 
 #if USE_TASK_WATCHDOG
   esp_task_wdt_reset();

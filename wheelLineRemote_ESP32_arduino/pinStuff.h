@@ -23,9 +23,13 @@ typedef enum
  * Functions
  ******************************************************************************/
 
+int32_t pinStuff_getBatterymV(void);
+
 void pinStuff_setLED(ledMode_t desired);
-void pinStuff_initButtons(void);
-void pinStuff_pollButtons(void);
+
+void pinStuff_poll(void);
+
+void pinStuff_init(void);
 
 // Returns true if it was already on
 bool pinStuff_requestVEXT(uint8_t bitToSet);

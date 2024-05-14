@@ -147,11 +147,7 @@ void oledStuff_printMachStateV1Packet(rxPacket_t *pRxPacket, machStateV1Packet_t
 }
 
 #if BATT_MACHSTATE_PRINT_TO_OLED
-static int32_t getBatterymV(void)
-{
-  int32_t mV2 = analogReadMilliVolts(1);
-  return mV2;
-}
+
 static void battMachStatePrint(void)
 {
   displayInstance.clear();
@@ -159,7 +155,7 @@ static void battMachStatePrint(void)
   displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   char str[64]; // Max of about 120 wide?
   // First line
-  uint32_t index = sprintf(str, "Batt mV:%d\n", getBatterymV());
+  uint32_t index = sprintf(str, "Batt mV:%d\n", pinStuff_getBatterymV());
   str[index] = 0;
   // Serial.printf(str);
   displayInstance.drawString(0, 0, str);
