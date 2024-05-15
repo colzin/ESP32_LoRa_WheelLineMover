@@ -16,8 +16,6 @@
 #include "esp32-hal-adc.h"
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 
-
-
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -127,49 +125,54 @@ static void printPacketHeader(rxPacket_t *pRxPacket)
   displayInstance.drawString(0, 16, str);
 }
 
-void oledStuff_printMachStateV1Packet(rxPacket_t *pRxPacket, machStateV1Packet_t *pData)
-{
-  // Clears and fills the first two lines
-  printPacketHeader(pRxPacket);
-  // Third line
-  char str[MAX_SCREEN_WIDTH_CHARS + 1];
-  uint32_t index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "st: %d ", pData->machState);
-  str[index] = 0;
-  // Serial.printf("%s,\n", str);
-  displayInstance.drawString(0, 32, str);
-
-  // Fourth line, nothing on this packet
-
-  displayInstance.display(); // Send it all
-  g_lastPrint_ms = millis();
-  g_delayToPrint_ms = SCREEN_STATE_CHANGE_ITVL_MS;
-}
-
 #if BATT_MACHSTATE_PRINT_TO_OLED
 static int32_t getBatterymV(void)
 {
   int32_t mV2 = analogReadMilliVolts(1);
   return mV2;
 }
+
+static char *states[] = {"PON_kill", "START", "runIdle", "runFWD", "runREV", "KILL"};
+
 static void battMachStatePrint(void)
 {
+  // clear, write 4 lines, need small text
   displayInstance.clear();
-  displayInstance.setFont(ArialMT_Plain_16);
-  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
-  char str[64]; // Max of about 120 wide?
-  // First line
-  uint32_t index = sprintf(str, "Batt mV:%d\n", getBatterymV());
+  // displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
+  displayInstance.setFont(ArialMT_Plain_10);
+  char str[MAX_SCREEN_WIDTH_CHARS + 1];
+  uint32_t index = 0;
+  rxPacket_t *pRxHeader = packetParser_getLastMachStateV1Header();
+  machStateV1Packet_t *pV1Data = packetParser_getLastMachStateV1DataPtr();
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "%05d,TX%d,RX%d,SNR%d", pV1Data->seqNo, pRxHeader->txdBm, pRxHeader->rxRSSI, pRxHeader->rxSNR);
   str[index] = 0;
-  // Serial.printf(str);
+  // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 0, str);
-  // Second line, empty
-  // Third line, machine state
-  index = sprintf(str, "MachState: %d", globalInts_getMachineState());
+  // Second line, at 16
+  index = 0;
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "Batt %dmV", getBatterymV());
   str[index] = 0;
-  displayInstance.drawString(0, 25, str);
+  // Serial.printf("%s,\n", str);
+  displayInstance.drawString(0, 16, str);
+  // Third line
+  index = 0;
+  uint32_t ago_ms = utils_elapsedU32Ticks(packetParser_lastMachV1PacketTimestamp(), millis());
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "seq %d, state %d, %d ms ago", pV1Data->seqNo, pV1Data->machState, ago_ms);
+  str[index] = 0;
+  // Serial.printf("%s,\n", str);
+  displayInstance.drawString(0, 32, str);
+
+  // Fourth line:
+  index = 0;
+
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "Our state %s.", states[globalInts_getMachineState()]);
+  str[index] = 0;
+  // Serial.printf("%s,\n", str);
+  displayInstance.drawString(0, 48, str);
 
   displayInstance.display(); // Send it all
+  g_lastPrint_ms = millis();
+  g_delayToPrint_ms = MIN_SCREEN_PRINT_ITVL_MS;
 }
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 

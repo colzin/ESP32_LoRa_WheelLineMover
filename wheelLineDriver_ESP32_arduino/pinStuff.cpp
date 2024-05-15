@@ -11,28 +11,22 @@
  ******************************************************************************/
 
 // GPIOs for buttons
-#define BUTTON_START_PIN GPIO_NUM_0 // GPIO0 is USER_KEY, TODO put in 3 buttons (start, FWD, Rev)
-#define BUTTON_REV_PIN GPIO_NUM_33
-#define BUTTON_FWD_PIN GPIO_NUM_34
+#define KILL_OPEN_RELAY 7         // GPIO7, J3 pin 18
+#define START_RELAY 6             // GPIO6, J3 pin 17
+#define EXTENDED_DEFAULT_RELAY 5  // GPIO5, JP3 pin 16. Make this out by default
+#define RETRACTED_DEFAULT_RELAY 4 // GPIO4, JP3 pin 15. Make this one in by default
+
+#define RELAY_ACTIVE 0 // TODO define
+#define RELAY_INACTIVE 1
 
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 static uint8_t g_vextBits;
 
-static int g_lastStartButton, g_lastFwdButton, g_lastRevButton;
 /*******************************************************************************
  * Code
  ******************************************************************************/
-
-static bool isPressed(gpio_num_t pinNo)
-{
-  if (gpio_get_level(pinNo))
-  { // High=false, pulled up
-    return false;
-  }
-  return true;
-}
 
 void pinStuff_setLED(ledMode_t desired)
 {
@@ -79,85 +73,61 @@ void pinStuff_releaseVEXT(uint8_t bitsToClear)
   }
 }
 
-void pinStuff_initButtons(void)
+void pinStuff_init(void)
 {
-  gpio_config_t pinCfg;
-  pinCfg.intr_type = GPIO_INTR_DISABLE;
-  pinCfg.mode = GPIO_MODE_INPUT;
-  pinCfg.pin_bit_mask = (1U << BUTTON_START_PIN) | (1U << BUTTON_FWD_PIN) | (1U << BUTTON_REV_PIN);
-  pinCfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
-  pinCfg.pull_up_en = GPIO_PULLUP_ENABLE; // Even if HW pullup, pull all up
-  esp_err_t ret = gpio_config(&pinCfg);
-  if (ESP_OK != ret)
-  {
-    Serial.printf("gpio_config error 0x%x\n", ret);
-  }
+  // Default all to inactive state, poller will drive appropriately
+  digitalWrite(KILL_OPEN_RELAY, RELAY_INACTIVE);
+  pinMode(KILL_OPEN_RELAY, OUTPUT);
+  digitalWrite(KILL_OPEN_RELAY, RELAY_INACTIVE);
+
+  digitalWrite(START_RELAY, RELAY_INACTIVE);
+  pinMode(START_RELAY, OUTPUT);
+  digitalWrite(START_RELAY, RELAY_INACTIVE);
+
+  digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+  pinMode(EXTENDED_DEFAULT_RELAY, OUTPUT);
+  digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+
+  digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE);
+  pinMode(RETRACTED_DEFAULT_RELAY, OUTPUT);
+  digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE);
 }
 
-static bool checkToStart(void)
+void pinStuff_poll(void)
 {
-  if (isPressed(BUTTON_START_PIN))
-  {
-    Serial.println("Moving to START state");
-    globalInts_setMachineState(machState_startEngine);
-    return true;
-  }
-  return false;
-}
-
-void pinStuff_pollButtons(void)
-{
-  // Get button states
-  machineState_t currentState = globalInts_getMachineState();
-  switch (currentState)
+  switch (globalInts_getMachineState())
   {
   case machState_justPoweredOn:
   case machState_killEngine:
-    checkToStart();
+    digitalWrite(KILL_OPEN_RELAY, RELAY_INACTIVE);
+    digitalWrite(START_RELAY, RELAY_INACTIVE);
+    digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE);
     break;
   case machState_startEngine:
-    if (!isPressed(BUTTON_START_PIN))
-    {
-      Serial.println("Start released, releasing starter, enging HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
+    digitalWrite(KILL_OPEN_RELAY, RELAY_ACTIVE);
+    digitalWrite(START_RELAY, RELAY_ACTIVE);
+    digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE); // Hydraulic idle With both relaxed
     break;
   case machState_runEngineHydIdle:
-    if (checkToStart())
-    {
-    }
-    else if (isPressed(BUTTON_FWD_PIN))
-    {
-      Serial.println("FWD pressed, engine HYD FWD");
-      globalInts_setMachineState(machState_runEngineHydFwd);
-    }
-    else if (isPressed(BUTTON_REV_PIN))
-    {
-      Serial.println("REV pressed, engine HYD REV");
-      globalInts_setMachineState(machState_runEngineHydRev);
-    }
+    digitalWrite(KILL_OPEN_RELAY, RELAY_ACTIVE);
+    digitalWrite(START_RELAY, RELAY_INACTIVE);
+    digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE); // Hydraulic idle
     break;
   case machState_runEngineHydFwd:
-    if (checkToStart())
-    {
-    }
-    if (!isPressed(BUTTON_FWD_PIN))
-    {
-      Serial.println("FWD released, engine HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
+    digitalWrite(KILL_OPEN_RELAY, RELAY_ACTIVE);
+    digitalWrite(START_RELAY, RELAY_INACTIVE);
+    digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_ACTIVE); // Suck it in to pull to the right
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_ACTIVE);
+
     break;
   case machState_runEngineHydRev:
-    if (checkToStart())
-    {
-    }
-    if (!isPressed(BUTTON_REV_PIN))
-    {
-      Serial.println("REV released, engine HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
-    break;
-  default:
+    digitalWrite(KILL_OPEN_RELAY, RELAY_ACTIVE);
+    digitalWrite(START_RELAY, RELAY_INACTIVE);
+    digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_INACTIVE);
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_ACTIVE); // Extend it to push to the left
     break;
   }
 }

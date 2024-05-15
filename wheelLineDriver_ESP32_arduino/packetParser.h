@@ -14,6 +14,10 @@ typedef struct
     uint8_t seqNo;
 } rxPacket_t;
 
+rxPacket_t *packetParser_getLastMachStateV1Header(void);
+machStateV1Packet_t *packetParser_getLastMachStateV1DataPtr(void);
+uint32_t packetParser_lastMachV1PacketTimestamp(void);
+
 void packetParser_parseLoRaData(const uint8_t *pData, const uint16_t dataLen, const int16_t rxRSSI, const int8_t rxSNR);
 
 bool packetParser_sendMachStateV1Packet(uint8_t machState);

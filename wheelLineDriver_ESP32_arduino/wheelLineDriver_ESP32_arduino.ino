@@ -2,6 +2,7 @@
 #include "Arduino.h"
 
 #include "defines.h"
+#include "globalInts.h"
 #include "loraStuff.h"
 #include "oledStuff.h"
 #include "packetParser.h"
@@ -19,6 +20,8 @@
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
+
+#define LAST_PACKET_TO_IDLE_MS 1900
 
 /*******************************************************************************
  * Variables
@@ -40,8 +43,11 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("WheelLineDriver start");
   Mcu.begin();
+
+  globalInts_setMachineState(machState_killEngine); // Default to kill unless told otherwise
+  pinStuff_init();
   pinStuff_setLED(led_weak);
-  pinStuff_initButtons();
+
   g_chipID = ESP.getEfuseMac();
   Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(g_chipID >> 32), (uint32_t)g_chipID);
   Serial.printf("ESP32 Chip model = %s Rev %d, %d cores\n", ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores());
@@ -91,27 +97,33 @@ void loop()
 {
   pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
 
-  pinStuff_pollButtons(); // Read HW buttons
-
 #if USE_TASK_WATCHDOG
   esp_task_wdt_reset();
 #endif // #if USE_TASK_WATCHDOG
 
-  serialInput_poll();
+  // Look for commands on LoRa
 #if LORA
   loraStuff_radioPoll();
   packetParser_poll();
 #endif // #if LORA
 
-#if WEBSERVER
-  server.handleClient();
-#endif // #if WEBSERVER
-
-#if MQTT
-  mqttStuff_poll();
-#endif // #if MQTT
-
+  // Look for commands on UART
+  serialInput_poll();
+  // See if we need to time out, or have received commands within the keep alive time.
+  if (machState_killEngine != globalInts_getMachineState())
+  {
+    uint32_t ago_ms = utils_elapsedU32Ticks(packetParser_lastMachV1PacketTimestamp(), millis());
+    if (ago_ms > LAST_PACKET_TO_IDLE_MS)
+    {
+      Serial.printf("Killing engine after %d ms of no command\n", ago_ms);
+      globalInts_setMachineState(machState_killEngine);
+    }
+  }
+  // Drive the pins
+  pinStuff_poll();
+  // Update screen too
   oledStuff_printersPoll();
+  // done, sleep
   pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
   yield();                   // Yield until the next tick
 }

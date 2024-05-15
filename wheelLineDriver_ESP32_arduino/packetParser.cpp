@@ -7,8 +7,9 @@
 
 #include "Arduino.h"
 
+#include "globalInts.h"
 #include "loraStuff.h"
-#include "pinStuff.h"
+
 #include "tagDefinitions.h"
 
 #include "utils.h"
@@ -57,6 +58,10 @@ static senderState_t g_sendState;
 
 #define MAX_TX_PACKETS 5
 static txPacket_t g_txSlots[MAX_TX_PACKETS];
+
+static rxPacket_t g_lastMachStateV1Header;
+static machStateV1Packet_t g_lastMachStateV1Data;
+static uint32_t g_lastV1PacketRx_ms;
 
 /*******************************************************************************
  * Prototypes
@@ -163,20 +168,32 @@ static bool parseAckPacket(rxPacket_t *pkt)
 
 static void parseMachstateV1Packet(rxPacket_t *pkt)
 {
-    // Parse the bytes in the ack tag
     if (MACHSTATE_V1_PKTLEN_BYTES != pkt->packetLen)
     {
         Serial.printf("  ERROR parsing machStateV1 packet len %d, should be %d\n", pkt->packetLen, MACHSTATE_V1_PKTLEN_BYTES);
         return;
     }
-    machStateV1Packet_t data;
     // Read the fields into the struct
-    pkt->pData = ReadBEUint8(pkt->pData, &data.seqNo);
-    pkt->pData = ReadBEUint8(pkt->pData, &data.machState);
-    Serial.printf("  Seq no %d, Machine state %d\n", data.seqNo, data.machState);
-#if PACKET_PRINT_TO_OLED
-    oledStuff_printMachStateV1Packet(pkt, &data);
-#endif // #if PACKET_PRINT_TO_OLED
+    pkt->pData = ReadBEUint8(pkt->pData, &g_lastMachStateV1Data.seqNo);
+    pkt->pData = ReadBEUint8(pkt->pData, &g_lastMachStateV1Data.machState);
+    // Serial.printf("  Seq no %d, Machine state %d\n", data.seqNo, data.machState);
+    g_lastMachStateV1Header = *pkt; // Copy the header into last received
+    g_lastV1PacketRx_ms = millis();
+    globalInts_setMachineState((machineState_t)g_lastMachStateV1Data.machState);
+}
+
+rxPacket_t *packetParser_getLastMachStateV1Header(void)
+{
+    return &g_lastMachStateV1Header;
+}
+machStateV1Packet_t *packetParser_getLastMachStateV1DataPtr(void)
+{
+    return &g_lastMachStateV1Data;
+}
+
+uint32_t packetParser_lastMachV1PacketTimestamp(void)
+{
+    return g_lastV1PacketRx_ms;
 }
 
 void packetParser_parseLoRaData(const uint8_t *pData, const uint16_t dataLen, const int16_t rxRSSI, const int8_t rxSNR)

@@ -9,6 +9,9 @@
 
 #include "Arduino.h"
 
+#include "packetParser.h"
+#include "utils.h"
+
 /*************************************************************************************
  *  Definitions
  ************************************************************************************/
@@ -46,14 +49,6 @@ void globalInts_setMachineState(machineState_t st)
         if (st != m_machState)
         {
             Serial.printf("Machine state from %d to %d\n", m_machState, st);
-#ifdef UART_TX_PIN
-            char strBuf[64];
-            int strLen = snprintf((char *)strBuf, sizeof(strBuf), "  Set state to %d\n", st);
-            if (0 < strLen)
-            {
-                uartTerminal_enqueueToUSB((const uint8_t *)strBuf, (uint32_t)strLen);
-            }
-#endif // #ifdef UART_TX_PIN
         }
         m_machState = st;
     }
