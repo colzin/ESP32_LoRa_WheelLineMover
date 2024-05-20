@@ -22,17 +22,17 @@
 
 // https://mylorawan.blogspot.com/2016/05/spread-factor-vs-payload-size-on-lora.html
 
+// This is specced by the radio transceiver
+#define MIN_TX_OUTPUT_POWER -9 //
+#define MAX_TX_OUTPUT_POWER 21 // dBm
+
 #define ALLOW_CHANGING_TX_POWER 0 // 1 to allow changing of our RX power
 #if ALLOW_CHANGING_RX_POWER
 #define MIN_RSSI -100 // Try to turn up if receiver hears us weaker than this
 #define MAX_RSSI -80  // Try to turn down if receiver hears us stronger than this
 #else
-#define OUR_TX_POWER -9 // hard-coded setting
-#endif                  // #if ALLOW_CHANGING_TX_POWER
-
-// This is specced by the radio transceiver
-#define MIN_TX_OUTPUT_POWER -9 //
-#define MAX_TX_OUTPUT_POWER 21 // dBm
+#define OUR_TX_POWER MIN_TX_OUTPUT_POWER // hard-coded setting
+#endif                                   // #if ALLOW_CHANGING_TX_POWER
 
 /* Each doubling of the bandwidth correlates to almost 3dB less link budget.
     More bandwidth means less range
@@ -114,14 +114,13 @@ static void setLoRaConfig(int32_t txPower)
 
 static void onRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-    pinStuff_setLED(led_on); // Turn bright while parsing
     g_expectingReply = false;
-    Radio.Sleep(); // Sleep here, to stop Rx timers.
+    Radio.Sleep();            // Sleep here, to stop Rx timers.
+    pinStuff_setLED(led_off); // Turn off when not RX or TX
     Serial.printf("onRxDone, set expectingReply false, parsing then going to sleep at %d.\n", millis());
     // TODO offload parsing to later? For now, try to keep this function short.
     g_lastRx_ms = millis();
     packetParser_parseLoRaData(payload, size, rssi, snr);
-    pinStuff_setLED(led_off); // Back to off for running task
 }
 static void onRxTimeout(void)
 {
@@ -131,15 +130,18 @@ static void onRxTimeout(void)
         g_expectingReply = false;
         // Serial.println("Set g_expectingReply false");
     }
-    Radio.Sleep(); // Leave in sleep
+    Radio.Sleep();            // Leave in sleep
+    pinStuff_setLED(led_off); // Turn off when not RX or TX
     Serial.printf("RxTimeout, idling at %d\n", millis());
 }
 static void onTxDone(void)
 {
     Radio.Sleep();
+    pinStuff_setLED(led_off); // Turn off when done
     if (g_expectingReply)
     {
-        Radio.Rx(AWAIT_ACK_MS); // Rx for ACK
+        Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK
+        pinStuff_setLED(led_weak); // Turn weak for RX
         Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
         g_expectingReplyStart_ms = millis();
     }
@@ -147,6 +149,7 @@ static void onTxDone(void)
 static void onTxTimeout(void)
 {
     Radio.Sleep();
+    pinStuff_setLED(led_off); // Turn off when done
     Serial.printf("onTxTimeout, going to sleep at %d\n", millis());
 }
 
@@ -175,6 +178,7 @@ void loraStuff_initRadio(void)
     setLoRaConfig(OUR_TX_POWER); // Set to hard-coded desired power
 #endif // #if ALLOW_CHANGING_TX_POWER
     Radio.Sleep();
+    pinStuff_setLED(led_off); // Turn off when not RX or TX
     g_expectingReply = false;
 }
 
@@ -209,6 +213,7 @@ void loraStuff_radioPoll(void)
         Serial.println(" Detected radio idle, starting infinite RX until next packet");
         g_expectingReply = false;
         Radio.Rx(0);
+        pinStuff_setLED(led_weak); // Turn weak for RX
     }
     uint32_t ms_now = millis();
 
@@ -219,8 +224,10 @@ void loraStuff_radioPoll(void)
             RadioState_t preSleepState = Radio.GetStatus();
             Serial.printf("Radio status %d. Has been over %d ms since last rx. Sleeping then resetting Rx\n", preSleepState, MSEC_TO_RESET_RX);
             Radio.Sleep();
+            pinStuff_setLED(led_off); // Turn off when not RX or TX
             RadioState_t sleepState = Radio.GetStatus();
             Radio.Rx(0);
+            pinStuff_setLED(led_weak); // Turn weak for RX
             RadioState_t rxState = Radio.GetStatus();
             Serial.printf("State at start: %d. After sleep command: %d. After Rx: %d\n", preSleepState, sleepState, rxState);
             g_lastRadioReset_ms = ms_now;
@@ -298,6 +305,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         {
             Serial.printf("Stopping Rx at %d, timed out waiting\n", millis());
             Radio.Sleep();
+            pinStuff_setLED(led_off); // Turn off when not RX or TX
             g_expectingReply = false;
         }
     }
@@ -305,6 +313,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     switch (radioState)
     {
     case RF_IDLE:
+        pinStuff_setLED(led_on); // Turn on for TX
         Radio.Send(txPtr, len);
         // Serial.printf("  Sent %d bytes, %d\n", len, millis());
         return send_success;
@@ -319,10 +328,12 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         // If here, we know we are not awaiting a reply, so we can change modes.
         Serial.printf("  Sleeping radio to send\n");
         Radio.Sleep();
+        pinStuff_setLED(led_off); // Turn off when not RX or TX
         radioState = Radio.GetStatus();
         switch (radioState)
         {
         case RF_IDLE:
+            pinStuff_setLED(led_on); // Turn on for TX
             Radio.Send(txPtr, len);
             Serial.printf("   Sent %d bytes, %d\n", len, millis());
             return send_success;

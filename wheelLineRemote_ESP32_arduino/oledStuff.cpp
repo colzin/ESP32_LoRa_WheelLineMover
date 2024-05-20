@@ -16,8 +16,6 @@
 #include "esp32-hal-adc.h"
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 
-
-
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -161,7 +159,7 @@ static void battMachStatePrint(void)
   displayInstance.drawString(0, 0, str);
   // Second line, empty
   // Third line, machine state
-  index = sprintf(str, "MachState: %d", globalInts_getMachineState());
+  index = sprintf(str, "MachState: %d, %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
   str[index] = 0;
   displayInstance.drawString(0, 25, str);
 

@@ -17,6 +17,7 @@ typedef struct
 void packetParser_parseLoRaData(const uint8_t *pData, const uint16_t dataLen, const int16_t rxRSSI, const int8_t rxSNR);
 
 bool packetParser_sendMachStateV1Packet(uint8_t machState);
+uint8_t packetParser_getLastMachStV1SeqNo(void);
 
 void packetParser_poll(void);
 

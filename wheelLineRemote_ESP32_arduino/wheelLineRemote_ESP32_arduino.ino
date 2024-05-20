@@ -77,7 +77,7 @@ void setup()
 
 void loop()
 {
-  pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
+  // pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
 
   pinStuff_poll(); // Read HW buttons
 
@@ -101,6 +101,6 @@ void loop()
 #endif // #if LORA
 
   oledStuff_printersPoll();
-  pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
+  // pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
   yield();                   // Yield until the next tick
 }

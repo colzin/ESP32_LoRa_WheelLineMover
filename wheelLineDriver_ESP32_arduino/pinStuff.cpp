@@ -120,7 +120,7 @@ void pinStuff_poll(void)
     digitalWrite(KILL_OPEN_RELAY, RELAY_ACTIVE);
     digitalWrite(START_RELAY, RELAY_INACTIVE);
     digitalWrite(EXTENDED_DEFAULT_RELAY, RELAY_ACTIVE); // Suck it in to pull to the right
-    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_ACTIVE);
+    digitalWrite(RETRACTED_DEFAULT_RELAY, RELAY_INACTIVE);
 
     break;
   case machState_runEngineHydRev:

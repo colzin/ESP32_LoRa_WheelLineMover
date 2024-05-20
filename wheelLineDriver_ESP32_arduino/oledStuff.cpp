@@ -150,14 +150,14 @@ static void battMachStatePrint(void)
   displayInstance.drawString(0, 0, str);
   // Second line, at 16
   index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "Batt %dmV", getBatterymV());
+  uint32_t ago_ms = utils_elapsedU32Ticks(packetParser_lastMachV1PacketTimestamp(), millis());
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "%8d ms ago:", ago_ms);
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 16, str);
   // Third line
   index = 0;
-  uint32_t ago_ms = utils_elapsedU32Ticks(packetParser_lastMachV1PacketTimestamp(), millis());
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "seq %d, state %d, %d ms ago", pV1Data->seqNo, pV1Data->machState, ago_ms);
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "seq %d, state %d", pV1Data->seqNo, pV1Data->machState);
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 32, str);

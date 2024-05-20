@@ -10,9 +10,9 @@
 
 #define SERIAL_BAUD_RATE 115200 // Would do 921600, but VSCode terminal won't support
 
-#define LORA 0
+#define LORA 1
 
-#define MACHSTATE_SEND_ITVL_MS 1300 // How often to send out the machine state
+#define MACHSTATE_SEND_ITVL_MS 800 // How often to send out the machine state
 
 
 #define BATT_MACHSTATE_PRINT_TO_OLED 1

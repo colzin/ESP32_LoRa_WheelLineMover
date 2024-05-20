@@ -21,7 +21,7 @@
  * Definitions
  ******************************************************************************/
 
-#define LAST_PACKET_TO_IDLE_MS 1900
+#define LAST_PACKET_TO_IDLE_MS 1200
 
 /*******************************************************************************
  * Variables
@@ -95,7 +95,7 @@ void setup()
 
 void loop()
 {
-  pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
+  // pinStuff_setLED(led_off); // Set off while we run, then back on weak when done
 
 #if USE_TASK_WATCHDOG
   esp_task_wdt_reset();
@@ -124,6 +124,6 @@ void loop()
   // Update screen too
   oledStuff_printersPoll();
   // done, sleep
-  pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
+  // pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
   yield();                   // Yield until the next tick
 }

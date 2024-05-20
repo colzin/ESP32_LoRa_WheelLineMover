@@ -322,6 +322,11 @@ bool packetParser_sendMachStateV1Packet(uint8_t machState)
     return ret;
 }
 
+uint8_t packetParser_getLastMachStV1SeqNo(void)
+{
+    return g_seqNoToBeAcked;
+}
+
 #define SEND_ERR_PRINT_ITVL_MS 500
 #if SEND_ERR_PRINT_ITVL_MS
 static bool g_lastSendErrored;
