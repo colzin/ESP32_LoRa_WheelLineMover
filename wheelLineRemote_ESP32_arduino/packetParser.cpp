@@ -7,6 +7,7 @@
 
 #include "Arduino.h"
 
+#include "globalInts.h"
 #include "loraStuff.h"
 #include "pinStuff.h"
 #include "tagDefinitions.h"
@@ -38,7 +39,6 @@ typedef struct
  * Variables
  ******************************************************************************/
 
-uint64_t g_chipID;
 // Keep track of the stats on the last packet received, and last ack packet received.
 static rxPacket_t g_lastReceivedPacket;
 // Store data from the last received ACK
@@ -98,10 +98,10 @@ static void parseAckAckPacket(rxPacket_t *pkt)
     // Check if this AckAck is for us
     uint64_t thisAckAckID;
     pkt->pData = ReadBEUint64(pkt->pData, &thisAckAckID); // The chip they are sending the ACK to
-    if (g_chipID != thisAckAckID)
+    if (globalInts_getChipIDU64() != thisAckAckID)
     {
         Serial.printf("Received AckAck destined for ID 0x%08x%08x, we are 0x%08x%08x, ignoring\n",
-                      (uint32_t)(thisAckAckID >> 32), (uint32_t)(thisAckAckID), (uint32_t)(g_chipID >> 32), (uint32_t)(g_chipID));
+                      (uint32_t)(thisAckAckID >> 32), (uint32_t)(thisAckAckID), (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)(globalInts_getChipIDU64()));
         return;
     }
     ackAckPacket_t ackAckData;
@@ -137,10 +137,10 @@ static bool parseAckPacket(rxPacket_t *pkt)
     // Check if this ACK is for us
     uint64_t thisAckID;
     pkt->pData = ReadBEUint64(pkt->pData, &thisAckID); // The chip they are sending the ACK to
-    if (g_chipID != thisAckID)
+    if (globalInts_getChipIDU64() != thisAckID)
     {
         Serial.printf("Received ACK destined for ID 0x%08x%08x, we are 0x%08x%08x, ignoring\n",
-                      (uint32_t)(thisAckID >> 32), (uint32_t)(thisAckID), (uint32_t)(g_chipID >> 32), (uint32_t)(g_chipID));
+                      (uint32_t)(thisAckID >> 32), (uint32_t)(thisAckID), (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)(globalInts_getChipIDU64()));
         return false;
     }
     // Read the fields into the struct
@@ -251,7 +251,7 @@ void packetParser_parseLoRaData(const uint8_t *pData, const uint16_t dataLen, co
 static uint8_t *populateHeaderMinusLen(uint8_t *pData, packetType_t pktType)
 {
 #if ALWAYS_SEND_CHIPID
-    pData = WriteBEUint64(pData, g_chipID);
+    pData = WriteBEUint64(pData, globalInts_getChipIDU64());
 #endif // #if ALWAYS_SEND_CHIPID
 #if SEND_TX_POWER
     pData = WriteBEInt8(pData, loraStuff_getCurrentTxdBm());
@@ -353,12 +353,13 @@ void packetParser_poll(void)
     {
         if (g_txSlots[i].size)
         { // Copy in the data, populate the length
+            uint32_t sendStart_ms = millis();
             sendFail_t sendRet = loraStuff_send(g_txSlots[i].pBuffer, g_txSlots[i].size);
             switch (sendRet)
             {
             case send_success:
             {
-                Serial.printf(" Just sent slot %d, length %d\n", i, g_txSlots[i].size);
+                Serial.printf(" Just sent slot %d, length %d, at %d\n", i, g_txSlots[i].size, sendStart_ms);
                 g_txSlots[i].size = 0;
                 loraStuff_setExpectingReply(g_txSlots[i].expectReply);
 #if SEND_ERR_PRINT_ITVL_MS
@@ -390,10 +391,9 @@ void packetParser_poll(void)
     }
 }
 
-void packetParser_init(uint64_t ourChipID)
+void packetParser_init(void)
 {
     g_seqNoToBeAcked = 0;
     g_ackResendCnt = 0;
     g_ackAckResendCnt = 0;
-    g_chipID = ourChipID;
 }

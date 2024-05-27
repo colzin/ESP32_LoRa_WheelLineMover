@@ -19,6 +19,8 @@
 
 // static int32_t m_int32s[GLOBALINTs_NUM_INT32s];
 static machineState_t m_machState;
+
+static uint64_t g_chipID;
 /*************************************************************************************
  *  Prototypes
  ************************************************************************************/
@@ -62,4 +64,12 @@ void globalInts_setMachineState(machineState_t st)
         Serial.printf("Tried to set invalid state %d, setting to kill engine\n", st);
         m_machState = machState_killEngine;
     }
+}
+
+uint64_t globalInts_getChipIDU64(void)
+{
+}
+
+void globalInts_setChipIDU64(uint64_t chipID)
+{
 }

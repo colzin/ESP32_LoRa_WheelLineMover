@@ -21,6 +21,6 @@ uint8_t packetParser_getLastMachStV1SeqNo(void);
 
 void packetParser_poll(void);
 
-void packetParser_init(uint64_t ourChipID);
+void packetParser_init(void);
 
 #endif // PACKETPARSER_H_

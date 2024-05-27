@@ -46,7 +46,7 @@ static uint32_t g_printStateChange_ms;
  * Code
  ******************************************************************************/
 
-void oledStuff_displayOn(void)
+static void oledStuff_displayOn(void)
 {
   if (!pinStuff_requestVEXT(VEXT_REQ_BIT_OLED))
   { // Wait for OLED screen to boot, TODO find time
@@ -58,7 +58,7 @@ void oledStuff_displayOn(void)
   displayInstance.display();
 }
 
-void oledStuff_displayOff(void)
+static void oledStuff_displayOff(void)
 {
   // Set it blank, in case we can't turn off VEXT
   displayInstance.clear();
@@ -68,17 +68,16 @@ void oledStuff_displayOff(void)
 
 void oledStuff_displayInit(void)
 {
-  // Serial.printf("ChipID:%04x%08x\n", (uint32_t)(chipID >> 32), (uint32_t)chipID);
   oledStuff_displayOn();
   displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
-  displayInstance.setFont(ArialMT_Plain_16);
+  // Each function that uses the display can set its own font size, and must clear on start
   displayInstance.clear();
+  displayInstance.display(); // display a blank screen
 }
 
 void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chipCores, uint32_t flashChipSize, uint64_t chipID)
 {
   displayInstance.clear();
-  // displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.setFont(ArialMT_Plain_16);
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   // First line
@@ -108,7 +107,6 @@ void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chip
 static void printPacketHeader(rxPacket_t *pRxPacket)
 {
   displayInstance.clear();
-  // displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.setFont(ArialMT_Plain_10);
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   uint32_t index = 0;
@@ -150,18 +148,41 @@ static void battMachStatePrint(void)
 {
   displayInstance.clear();
   displayInstance.setFont(ArialMT_Plain_16);
-  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   char str[64]; // Max of about 120 wide?
   // First line
-  uint32_t index = sprintf(str, "Batt mV:%d\n", pinStuff_getBatterymV());
+  uint32_t index = sprintf(str, "Batt:%dmV\n", pinStuff_getBatterymV());
   str[index] = 0;
   // Serial.printf(str);
   displayInstance.drawString(0, 0, str);
-  // Second line, empty
-  // Third line, machine state
-  index = sprintf(str, "MachState: %d, %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
+  // Second line, machine state
+  index = sprintf(str, "State:%d,count %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
   str[index] = 0;
-  displayInstance.drawString(0, 25, str);
+  displayInstance.drawString(0, 16, str);
+
+  // Third line, LoRa stats
+  index = snprintf(str, sizeof(str), "Tx Pwr:%d, ", loraStuff_getCurrentTxdBm());
+  switch (loraStuff_getRadioState())
+  {
+  case LoRa_IDLE:
+    index += snprintf(str + index, sizeof(str) - index, "idle");
+    break;
+  case LoRa_RX:
+    index += snprintf(str + index, sizeof(str) - index, "RX");
+    break;
+  case LoRa_TX:
+    index += snprintf(str + index, sizeof(str) - index, "TX");
+    break;
+  case LoRa_CAD:
+    index += snprintf(str + index, sizeof(str) - index, "CAD");
+    break;
+  }
+  str[index] = 0;
+  displayInstance.drawString(0, 32, str);
+
+  // Fourth line, ID
+  index = sprintf(str, "ID 0x%08x%08x", (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)globalInts_getChipIDU64());
+  str[index] = 0;
+  displayInstance.drawString(0, 48, str);
 
   displayInstance.display(); // Send it all
 }

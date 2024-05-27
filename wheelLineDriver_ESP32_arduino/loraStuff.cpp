@@ -26,12 +26,13 @@
 #define MIN_TX_OUTPUT_POWER -9 //
 #define MAX_TX_OUTPUT_POWER 21 // dBm
 
-#define ALLOW_CHANGING_TX_POWER 0 // 1 to allow changing of our RX power
-#if ALLOW_CHANGING_RX_POWER
-#define MIN_RSSI -100 // Try to turn up if receiver hears us weaker than this
-#define MAX_RSSI -80  // Try to turn down if receiver hears us stronger than this
+#define ALLOW_CHANGING_TX_POWER 1 // 1 to allow changing of our RX power
+#if ALLOW_CHANGING_TX_POWER
+#define OUR_TX_POWER MIN_TX_OUTPUT_POWER // Start here, can go up from here
+#define MIN_RSSI -100                    // Try to turn up if receiver hears us weaker than this
+#define MAX_RSSI -80                     // Try to turn down if receiver hears us stronger than this
 #else
-#define OUR_TX_POWER MIN_TX_OUTPUT_POWER // hard-coded setting
+#define OUR_TX_POWER MAX_TX_OUTPUT_POWER // hard-coded setting
 #endif                                   // #if ALLOW_CHANGING_TX_POWER
 
 /* Each doubling of the bandwidth correlates to almost 3dB less link budget.
@@ -304,6 +305,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         else
         {
             Serial.printf("Stopping Rx at %d, timed out waiting\n", millis());
+            loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
             Radio.Sleep();
             pinStuff_setLED(led_off); // Turn off when not RX or TX
             g_expectingReply = false;

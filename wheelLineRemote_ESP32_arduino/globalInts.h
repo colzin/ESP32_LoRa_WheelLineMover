@@ -25,4 +25,7 @@ typedef enum
 machineState_t globalInts_getMachineState(void);
 void globalInts_setMachineState(machineState_t st);
 
+uint64_t globalInts_getChipIDU64(void);
+void globalInts_setChipIDU64(uint64_t chipID);
+
 #endif /* SRC_GLOBALINTS_H_ */

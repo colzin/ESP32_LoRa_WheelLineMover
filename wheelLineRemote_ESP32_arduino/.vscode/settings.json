@@ -4,5 +4,12 @@
         "array": "cpp",
         "string": "cpp",
         "string_view": "cpp"
-    }
+    },
+
+    "C_Cpp.files.exclude": {
+        "**/build/**/*.hpp": true,
+        "**/build/**/*.h": true
+    },
+    
+    "C_Cpp.exclusionPolicy": "checkFilesAndFolders"
 }

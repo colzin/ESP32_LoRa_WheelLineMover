@@ -25,8 +25,6 @@
  * Variables
  ******************************************************************************/
 
-static uint64_t g_chipID;
-
 #if USE_TASK_WATCHDOG
 #include <esp_task_wdt.h>
 #define TASK_WDT_TIMEOUT_SEC 5 // Wait this long before WDT panic
@@ -43,8 +41,8 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("WheelLineRemote start");
   Mcu.begin();
-  g_chipID = ESP.getEfuseMac();
-  Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(g_chipID >> 32), (uint32_t)g_chipID);
+  globalInts_setChipIDU64(ESP.getEfuseMac());
+  Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)globalInts_getChipIDU64());
   Serial.printf("ESP32 Chip model = %s Rev %d, %d cores\n", ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores());
 
   // Serial.printf("\nROM_core0 reason %d, ROM_core1 reason %d, rtc_0 reason %d, RTC_1 reason %d\n",
@@ -56,12 +54,12 @@ void setup()
   lis2dh_init();
   oledStuff_displayInit();
 
-  // oledStuff_printESPInfo(ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getFlashChipSize(), g_chipID);
+  oledStuff_printESPInfo(ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getFlashChipSize(), globalInts_getChipIDU64());
 
   // Init packet parser, then radio
 
 #if LORA
-  packetParser_init(g_chipID);
+  packetParser_init();
   loraStuff_initRadio();
 
 #endif // #if LORA
@@ -86,6 +84,7 @@ void loop()
 #endif // #if USE_TASK_WATCHDOG
 
   serialInput_poll();
+
 #if LORA
   loraStuff_radioPoll();
   packetParser_poll();
@@ -94,7 +93,7 @@ void loop()
 
   if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
   {
-    Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
+    // Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
     packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState());
     g_lastMachStateSend_ms = millis();
   }
@@ -102,5 +101,5 @@ void loop()
 
   oledStuff_printersPoll();
   // pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
-  yield();                   // Yield until the next tick
+  yield(); // Yield until the next tick
 }

@@ -5,7 +5,6 @@
 
 #include "defines.h"
 
-
 #include "packetParser.h" // for struct defs
 
 #include "HT_SSD1306Wire.h"

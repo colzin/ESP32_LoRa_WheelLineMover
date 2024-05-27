@@ -12,8 +12,8 @@
 
 #define LORA 1
 
-#define MACHSTATE_SEND_ITVL_MS 800 // How often to send out the machine state
-
+#include "loraStuff.h"
+#define MACHSTATE_SEND_ITVL_MS (MIN_TX_ITVL_MS + 1) // How often to send out the machine state
 
 #define BATT_MACHSTATE_PRINT_TO_OLED 1
 #define LORA_RX_PRINT_TO_OLED 1
