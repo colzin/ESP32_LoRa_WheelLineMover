@@ -183,7 +183,7 @@ static void battMachStatePrint(void)
   displayInstance.drawString(0, 16, str);
   // Third line
   index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "seq %d, state %d", pV1Data->seqNo, pV1Data->machState);
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "seq %d, state %d", seqNo, globalInts_getMachineState());
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 32, str);
