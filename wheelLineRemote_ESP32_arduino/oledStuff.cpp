@@ -159,7 +159,7 @@ static void battMachStatePrint(void)
   displayInstance.setFont(ArialMT_Plain_16);
   char str[64]; // Max of about 120 wide?
   // First line
-  uint32_t index = sprintf(str, "Batt:%dmV\n", pinStuff_getBatterymV());
+  uint32_t index = sprintf(str, "Batt:%dmV,ID24:\n", pinStuff_getBatterymV());
   str[index] = 0;
   // Serial.printf(str);
   displayInstance.drawString(0, 0, str);
