@@ -32,6 +32,8 @@
 
 static uint32_t g_lastMachStateSend_ms;
 
+static uint8_t g_destID[CHIPID_LEN_BYTES]; // The destination, that we want to control
+
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -59,7 +61,14 @@ void setup()
   // Init packet parser, then radio
 
 #if LORA
-  packetParser_init();
+  // Set our destination ID
+  g_destID[0] = 0x01;
+  g_destID[1] = 0x02;
+  g_destID[2] = 0x03;
+  g_destID[3] = 0x04;
+  g_destID[4] = 0x05;
+  g_destID[5] = 0x06;
+  packetParser_init(globalInts_getChipIDU64());
   loraStuff_initRadio();
 
 #endif // #if LORA
@@ -94,7 +103,7 @@ void loop()
   if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
   {
     // Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
-    packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState());
+    packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState(), g_destID);
     g_lastMachStateSend_ms = millis();
   }
 #endif // #if LORA

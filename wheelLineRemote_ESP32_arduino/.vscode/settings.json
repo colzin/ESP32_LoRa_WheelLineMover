@@ -7,7 +7,9 @@
     },
 
     "C_Cpp.files.exclude": {
+        "**/build/**/*.cpp": true,
         "**/build/**/*.hpp": true,
+        "**/build/**/*.c": true,
         "**/build/**/*.h": true
     },
     

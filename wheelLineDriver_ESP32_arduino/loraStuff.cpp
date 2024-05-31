@@ -61,9 +61,6 @@
 #define LORA_FREQ_HOP_ON 0           // 1 to enable, 0 to disable
 #define LORA_IQ_INVERSION_ON 0       // 1 to enable, 0 to disable
 #define LORA_RX_CONTINUOUS false     // false for single mode, true for continuous RX
-#define LORA_TX_TIMEOUT 300          // Transmission timeout [ms]
-
-#define AWAIT_ACK_MS (110 + LORA_TX_TIMEOUT) // How long to wait for an ACK after a TX packet
 
 #define MSEC_TO_RESET_RX 32000 // Probes should report every 30 sec
 
@@ -125,15 +122,14 @@ static void onRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 }
 static void onRxTimeout(void)
 {
-    if (g_expectingReply)
-    { // If we didn't receive an ACK, max out our power
-        // loraStuff_adjustTxPwr(MIN_RSSI - 40);
-        g_expectingReply = false;
-        // Serial.println("Set g_expectingReply false");
-    }
     Radio.Sleep();            // Leave in sleep
     pinStuff_setLED(led_off); // Turn off when not RX or TX
-    Serial.printf("RxTimeout, idling at %d\n", millis());
+    Serial.printf("RxTimeout at %d, %s\n", millis(), g_expectingReply ? "Was expecting reply" : "");
+    if (g_expectingReply)
+    {                                         // If we didn't receive an ACK, max out our power
+        loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
+        g_expectingReply = false;
+    }
 }
 static void onTxDone(void)
 {
@@ -143,7 +139,7 @@ static void onTxDone(void)
     {
         Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK
         pinStuff_setLED(led_weak); // Turn weak for RX
-        Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
+        // Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
         g_expectingReplyStart_ms = millis();
     }
 }
@@ -174,7 +170,7 @@ void loraStuff_initRadio(void)
     Radio.Init(&g_radioEvents);
     Radio.SetChannel(RF_FREQUENCY);
 #if ALLOW_CHANGING_TX_POWER
-    setLoRaConfig(0);
+    setLoRaConfig(MIN_TX_OUTPUT_POWER);
 #else
     setLoRaConfig(OUR_TX_POWER); // Set to hard-coded desired power
 #endif // #if ALLOW_CHANGING_TX_POWER
@@ -241,6 +237,11 @@ int8_t loraStuff_getCurrentTxdBm(void)
     return g_currentTxdBm;
 }
 
+loraRadioState_t loraStuff_getRadioState(void)
+{
+    return (loraRadioState_t)Radio.GetStatus();
+}
+
 void loraStuff_adjustTxPwr(int16_t theirRSSI)
 {
     int16_t oldTxdBm = g_currentTxdBm;
@@ -279,7 +280,7 @@ void loraStuff_adjustTxPwr(int16_t theirRSSI)
         Radio.Standby(); // Put radio into standby, then set TX power
         // Set power, which is an int8
         g_currentTxdBm = SX126xSetTxParams((int8_t)newDesiredTxPower, RADIO_RAMP_200_US);
-        Serial.printf("     CHANGED OUR RADIO TX from %d to %d because their RSSI was %d\n", oldTxdBm, g_currentTxdBm, theirRSSI);
+        Serial.printf("  CHANGED LoRa TX PWR %d to %d because their RSSI was %d\n", oldTxdBm, g_currentTxdBm, theirRSSI);
     }
 }
 
@@ -297,18 +298,15 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     }
     if (g_expectingReply)
     {
-        // Serial.println("Expecting reply, wait"); Happens all the time
         if (utils_elapsedU32Ticks(g_expectingReplyStart_ms, millis()) < AWAIT_ACK_MS)
         {
+            // Serial.println("Expecting reply, wait"); Happens all the time
             return sendFail_awaitingReply;
         }
         else
         {
-            Serial.printf("Stopping Rx at %d, timed out waiting\n", millis());
-            loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
-            Radio.Sleep();
-            pinStuff_setLED(led_off); // Turn off when not RX or TX
-            g_expectingReply = false;
+            Serial.printf("Tx start, awaiting reply at %d, call timeout: ", millis());
+            onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
         }
     }
     RadioState_t radioState = Radio.GetStatus();
@@ -317,7 +315,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     case RF_IDLE:
         pinStuff_setLED(led_on); // Turn on for TX
         Radio.Send(txPtr, len);
-        // Serial.printf("  Sent %d bytes, %d\n", len, millis());
+        Serial.printf("  Radio idle, sending now: %d bytes, %d\n", len, millis());
         return send_success;
         break;
     case RF_TX_RUNNING:

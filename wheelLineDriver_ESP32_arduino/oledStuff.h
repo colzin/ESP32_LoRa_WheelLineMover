@@ -5,10 +5,6 @@
 
 #include "defines.h"
 
-#if WIFI
-#include "WiFiType.h"
-#endif // #if WIFI
-
 #include "packetParser.h" // for struct defs
 
 #include "HT_SSD1306Wire.h"

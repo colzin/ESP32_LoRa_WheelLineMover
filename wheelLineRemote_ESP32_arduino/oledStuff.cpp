@@ -54,6 +54,7 @@ static void oledStuff_displayOn(void)
   }
   // Always re-init and clear it.
   displayInstance.init();
+  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.clear();
   displayInstance.display();
 }
@@ -69,10 +70,7 @@ static void oledStuff_displayOff(void)
 void oledStuff_displayInit(void)
 {
   oledStuff_displayOn();
-  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   // Each function that uses the display can set its own font size, and must clear on start
-  displayInstance.clear();
-  displayInstance.display(); // display a blank screen
 }
 
 void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chipCores, uint32_t flashChipSize, uint64_t chipID)
@@ -103,6 +101,16 @@ void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chip
   displayInstance.display();
 }
 
+static uint32_t snprintfIDHex(char *ptr, uint32_t maxlen, uint8_t *pID)
+{
+  uint32_t ret = 0; // How many we have printed
+  Serial.print("0x");
+  for (uint8_t i = 0; i < CHIPID_LEN_BYTES; i++)
+  {
+    ret += snprintf(ptr + ret, maxlen - ret, "%02x ", pID[i]);
+  }
+}
+
 // Clears and fills the first two lines
 static void printPacketHeader(rxPacket_t *pRxPacket)
 {
@@ -117,7 +125,8 @@ static void printPacketHeader(rxPacket_t *pRxPacket)
 
   // Second line
   index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "ID 0x%08x%08x", (uint32_t)(pRxPacket->uuid64 >> 32), (uint32_t)(pRxPacket->uuid64));
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "ID 0x");
+  index += snprintfIDHex(str + index, MAX_SCREEN_WIDTH_CHARS - index, pRxPacket->sourceChipID);
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 16, str);
@@ -154,12 +163,18 @@ static void battMachStatePrint(void)
   str[index] = 0;
   // Serial.printf(str);
   displayInstance.drawString(0, 0, str);
-  // Second line, machine state
-  index = sprintf(str, "State:%d,count %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
+
+  // Second line, ID
+  index = sprintf(str, "0x%04x %08x", (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)globalInts_getChipIDU64());
   str[index] = 0;
   displayInstance.drawString(0, 16, str);
 
-  // Third line, LoRa stats
+  // Third line, machine state
+  index = sprintf(str, "State:%d,count %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
+  str[index] = 0;
+  displayInstance.drawString(0, 32, str);
+
+  // Fourth line, LoRa stats
   index = snprintf(str, sizeof(str), "Tx Pwr:%d, ", loraStuff_getCurrentTxdBm());
   switch (loraStuff_getRadioState())
   {
@@ -167,20 +182,15 @@ static void battMachStatePrint(void)
     index += snprintf(str + index, sizeof(str) - index, "idle");
     break;
   case LoRa_RX:
-    index += snprintf(str + index, sizeof(str) - index, "RX");
+    index += snprintf(str + index, sizeof(str) - index, " RX ");
     break;
   case LoRa_TX:
-    index += snprintf(str + index, sizeof(str) - index, "TX");
+    index += snprintf(str + index, sizeof(str) - index, " TX ");
     break;
   case LoRa_CAD:
-    index += snprintf(str + index, sizeof(str) - index, "CAD");
+    index += snprintf(str + index, sizeof(str) - index, "CAD ");
     break;
   }
-  str[index] = 0;
-  displayInstance.drawString(0, 32, str);
-
-  // Fourth line, ID
-  index = sprintf(str, "ID 0x%08x%08x", (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)globalInts_getChipIDU64());
   str[index] = 0;
   displayInstance.drawString(0, 48, str);
 

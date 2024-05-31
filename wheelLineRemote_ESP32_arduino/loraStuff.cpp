@@ -170,7 +170,7 @@ void loraStuff_initRadio(void)
     Radio.Init(&g_radioEvents);
     Radio.SetChannel(RF_FREQUENCY);
 #if ALLOW_CHANGING_TX_POWER
-    setLoRaConfig(0);
+    setLoRaConfig(MIN_TX_OUTPUT_POWER);
 #else
     setLoRaConfig(OUR_TX_POWER); // Set to hard-coded desired power
 #endif // #if ALLOW_CHANGING_TX_POWER

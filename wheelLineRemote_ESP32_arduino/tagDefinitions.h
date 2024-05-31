@@ -13,16 +13,23 @@ extern "C"
          * Definitions
          ******************************************************************************/
 
-#define MAX_PACKET_LEN 255 // Max number of bytes per packet
+#define MAX_PACKET_LEN 254 // Sanity check
 
-#define SEND_TX_POWER 1 // Send first byte of each packet
-#define ALWAYS_SEND_CHIPID 1
+#define PACKET_HEADER_VERSION_NUM 1 // TODO increment for each change in header's bytes
 
-#if ALWAYS_SEND_CHIPID && SEND_TX_POWER
-#define PACKET_HEADER_SIZE (8 + 1 + 1 + 2) // 8 for 64-bit UUID, 1 for TX power 1 for type, 2 for length
-#else
-#define PACKET_HEADER_SIZE (1 + 2) // 1 for type, 2 for length
-#endif                             // #if ALWAYS_SEND_CHIPID
+#if (1 == PACKET_HEADER_VERSION_NUM)
+/* Header will be as follows:
+        Destination chip ID[num bytes] // Can ignore if not for us
+        Source chip ID[num bytes]
+        TX power [int8]
+        Packet type [uint8]
+*/
+#define CHIPID_LEN_BYTES 6 // How many bytes to send for chip ID
+// For this version's header:
+#define TX_POWER_NUMBYTES 1
+#define PACKET_TYPE_NUMBYTES 1
+// No length, let type byte imply that
+#define PACKET_HEADER_NUMBYTES (CHIPID_LEN_BYTES + CHIPID_LEN_BYTES + TX_POWER_NUMBYTES + PACKET_TYPE_NUMBYTES)
 
         /*
                 Packets have a type [uint8], then len[uint16], then data [bytes]
@@ -39,33 +46,35 @@ extern "C"
 
         typedef struct
         {
-                uint64_t idBeingAcked; // The intended recipient of this ACK packet
-                int16_t rxPacketRSSI;  // RSSI that the other side received our packet with
-                uint8_t seqNoToAck;    // This is the seqNo that we are sending the ACK to.
-                uint8_t seqNo;         // This is the seqNo of the ack(s)
-                int8_t rxPacketSNR;    // SNR that the other side received our packet with
+                int16_t rxPacketRSSI;   // RSSI that the other side received our packet with
+                uint8_t seqNoToAck;     // This is the seqNo that we are sending the ACK to.
+                uint8_t ackResendCount; // This is the seqNo of the ack(s), aka resend count
+                int8_t rxPacketSNR;     // SNR that the other side received our packet with
         } ackPacket_t;
-#define ACK_PKTLEN_BYTES (5 + 8)
+#define ACK_PKTLEN_BYTES (CHIPID_LEN_BYTES + 5)
 
         typedef struct
         {
-                uint64_t idBeingAckAcked;
-                int16_t rxPacketRSSI;  // RSSI that the other side received our packet with
-                int16_t ackPacketRSSI; // RSSI that we received the ACK with
-                uint8_t seqNoToAckAck; // The seqNo that they are acking, that we AckAck
-                uint8_t seqNoToAck;    // The seqNo of the ACK that we received, their seq no
-                uint8_t seqNo;         // How many times we have ACKACKed their ACK
-                int8_t rxPacketSNR;    // SNR that the other side received our packet with
-                int8_t ackPacketSNR;   // SNR that we received the ACK with
+                int16_t rxPacketRSSI;   // RSSI that the other side received our packet with
+                int16_t ackPacketRSSI;  // RSSI that we received the ACK with
+                int8_t rxPacketSNR;     // SNR that the other side received our packet with
+                int8_t ackPacketSNR;    // SNR that we received the ACK with
+                uint8_t seqNo;          // The original packet's sequence number being acked
+                uint8_t ackResendCount; // How many times they have repeated this ACK to us
+
         } ackAckPacket_t;
-#define ACKACK_PKTLEN_BYTES (9 + 8)
+#define ACKACK_PKTLEN_BYTES (CHIPID_LEN_BYTES + 9)
 
         typedef struct
         {
-                uint8_t machState;
-                uint8_t seqNo; // Sequence number of this packet
+                uint8_t machState; // State to put receiver into
+                uint8_t seqNo;     // Sequence number of this packet
         } machStateV1Packet_t;
 #define MACHSTATE_V1_PKTLEN_BYTES (1 + 1)
+
+#else
+#error "Please define packet header for this version "
+#endif // #if (1 == PACKET_HEADER_VERSION_NUM)
 
 #ifdef __cplusplus
 }

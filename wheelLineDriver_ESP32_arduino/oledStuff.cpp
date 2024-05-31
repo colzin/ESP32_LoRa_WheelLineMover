@@ -46,7 +46,7 @@ static uint32_t g_printStateChange_ms;
  * Code
  ******************************************************************************/
 
-void oledStuff_displayOn(void)
+static void oledStuff_displayOn(void)
 {
   if (!pinStuff_requestVEXT(VEXT_REQ_BIT_OLED))
   { // Wait for OLED screen to boot, TODO find time
@@ -54,11 +54,12 @@ void oledStuff_displayOn(void)
   }
   // Always re-init and clear it.
   displayInstance.init();
+  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.clear();
   displayInstance.display();
 }
 
-void oledStuff_displayOff(void)
+static void oledStuff_displayOff(void)
 {
   // Set it blank, in case we can't turn off VEXT
   displayInstance.clear();
@@ -68,17 +69,13 @@ void oledStuff_displayOff(void)
 
 void oledStuff_displayInit(void)
 {
-  // Serial.printf("ChipID:%04x%08x\n", (uint32_t)(chipID >> 32), (uint32_t)chipID);
   oledStuff_displayOn();
-  displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
-  displayInstance.setFont(ArialMT_Plain_16);
-  displayInstance.clear();
+  // Each function that uses the display can set its own font size, and must clear on start
 }
 
 void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chipCores, uint32_t flashChipSize, uint64_t chipID)
 {
   displayInstance.clear();
-  // displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.setFont(ArialMT_Plain_16);
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   // First line
@@ -104,11 +101,20 @@ void oledStuff_printESPInfo(const char *chipModel, uint8_t chipRev, uint8_t chip
   displayInstance.display();
 }
 
+static uint32_t snprintfIDHex(char *ptr, uint32_t maxlen, uint8_t *pID)
+{
+  uint32_t ret = 0; // How many we have printed
+  Serial.print("0x");
+  for (uint8_t i = 0; i < CHIPID_LEN_BYTES; i++)
+  {
+    ret += snprintf(ptr + ret, maxlen - ret, "%02x ", pID[i]);
+  }
+}
+
 // Clears and fills the first two lines
 static void printPacketHeader(rxPacket_t *pRxPacket)
 {
   displayInstance.clear();
-  // displayInstance.setTextAlignment(TEXT_ALIGN_LEFT);
   displayInstance.setFont(ArialMT_Plain_10);
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   uint32_t index = 0;
@@ -119,10 +125,30 @@ static void printPacketHeader(rxPacket_t *pRxPacket)
 
   // Second line
   index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "ID 0x%08x%08x", (uint32_t)(pRxPacket->uuid64 >> 32), (uint32_t)(pRxPacket->uuid64));
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "ID 0x");
+  index += snprintfIDHex(str + index, MAX_SCREEN_WIDTH_CHARS - index, pRxPacket->sourceChipID);
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 16, str);
+}
+
+void oledStuff_printMachStateV1Packet(rxPacket_t *pRxPacket, machStateV1Packet_t *pData)
+{
+  // Clears and fills the first two lines
+  printPacketHeader(pRxPacket);
+  // Third line
+  char str[MAX_SCREEN_WIDTH_CHARS + 1];
+  uint32_t index = 0;
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "st: %d ", pData->machState);
+  str[index] = 0;
+  // Serial.printf("%s,\n", str);
+  displayInstance.drawString(0, 32, str);
+
+  // Fourth line, nothing on this packet
+
+  displayInstance.display(); // Send it all
+  g_lastPrint_ms = millis();
+  g_delayToPrint_ms = SCREEN_STATE_CHANGE_ITVL_MS;
 }
 
 #if BATT_MACHSTATE_PRINT_TO_OLED
@@ -143,8 +169,8 @@ static void battMachStatePrint(void)
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   uint32_t index = 0;
   rxPacket_t *pRxHeader = packetParser_getLastMachStateV1Header();
-  machStateV1Packet_t *pV1Data = packetParser_getLastMachStateV1DataPtr();
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "%05d,TX%d,RX%d,SNR%d", pV1Data->seqNo, pRxHeader->txdBm, pRxHeader->rxRSSI, pRxHeader->rxSNR);
+  uint8_t seqNo = packetParser_getLastMachStV1SeqNo();
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "%05d,TX%d,RX%d,SNR%d", seqNo, pRxHeader->txdBm, pRxHeader->rxRSSI, pRxHeader->rxSNR);
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 0, str);
@@ -166,13 +192,9 @@ static void battMachStatePrint(void)
   index = 0;
 
   index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "Our state %s.", states[globalInts_getMachineState()]);
-  str[index] = 0;
-  // Serial.printf("%s,\n", str);
-  displayInstance.drawString(0, 48, str);
 
   displayInstance.display(); // Send it all
   g_lastPrint_ms = millis();
-  g_delayToPrint_ms = MIN_SCREEN_PRINT_ITVL_MS;
 }
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 
