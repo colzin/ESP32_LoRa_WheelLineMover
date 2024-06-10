@@ -29,12 +29,23 @@
 
 #define ADC_POLL_ITVL_MS 1230
 
+#define BUTTONS_DEBOUNCE_PRESS_MS 72 // 50 was very short, 500 too long.
+#define BUTTONS_DEBOUNCE_RELEASE_MS BUTTONS_DEBOUNCE_PRESS_MS
+
+typedef struct
+{
+  uint8_t pinNumber;
+  bool pressedThisPoll, pressedLastPoll;
+  uint32_t inState_ms;
+} buttonInfo_t;
+
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 static uint8_t g_vextBits;
 
-static int g_lastStartButton, g_lastFwdButton, g_lastRevButton;
+static buttonInfo_t g_startButtonInfo, g_fwdButtonInfo, g_revButtonInfo;
+static uint32_t g_lastButtonPoll_ms;
 
 static int32_t g_lastBatt_mV;
 static uint32_t g_lastAdcPoll_ms;
@@ -46,15 +57,6 @@ static uint32_t g_lastAdcPoll_ms;
 int32_t pinStuff_getBatterymV(void)
 {
   return g_lastBatt_mV;
-}
-
-static bool isLow(uint8_t pinNo)
-{
-  if (digitalRead(pinNo))
-  {
-    return false;
-  }
-  return true;
 }
 
 void pinStuff_setLED(ledMode_t desired)
@@ -108,76 +110,124 @@ void pinStuff_initButtons(void)
   pinMode(BUTTON_START_PIN, INPUT_PULLUP);
   pinMode(BUTTON_FWD_PIN, INPUT_PULLUP);
   pinMode(BUTTON_REV_PIN, INPUT_PULLUP);
-
-  Serial.printf("\nConfig for START: 0x%x, FWD: 0x%x, REV: 0x%x\n\n", *((uint32_t *)GPIO_PIN_REG_0), *((uint32_t *)GPIO_PIN_REG_33), *((uint32_t *)GPIO_PIN_REG_34));
+  // Serial.printf("\nConfig for START: 0x%x, FWD: 0x%x, REV: 0x%x\n\n", *((uint32_t *)GPIO_PIN_REG_0), *((uint32_t *)GPIO_PIN_REG_33), *((uint32_t *)GPIO_PIN_REG_34));
+  g_startButtonInfo.pinNumber = BUTTON_START_PIN;
+  g_startButtonInfo.inState_ms = 0;
+  g_startButtonInfo.pressedLastPoll = false;
+  g_startButtonInfo.pressedThisPoll = false;
+  g_fwdButtonInfo.pinNumber = BUTTON_FWD_PIN;
+  g_fwdButtonInfo.inState_ms = 0;
+  g_fwdButtonInfo.pressedLastPoll = false;
+  g_fwdButtonInfo.pressedThisPoll = false;
+  g_revButtonInfo.pinNumber = BUTTON_REV_PIN;
+  g_revButtonInfo.inState_ms = 0;
+  g_revButtonInfo.pressedLastPoll = false;
+  g_revButtonInfo.pressedThisPoll = false;
 }
 
-static bool checkToStart(void)
+static void updateButtonState(buttonInfo_t *p, uint32_t ms_now, uint32_t lastPoll_ms)
 {
-  if (isLow(BUTTON_START_PIN))
-  {
-    Serial.println("Moving to START state");
-    globalInts_setMachineState(machState_startEngine);
-    return true;
+  // Move current to last
+  p->pressedLastPoll = p->pressedThisPoll;
+  // update current
+  if (digitalRead(p->pinNumber))
+  { // High, so not pressed (active low)
+    p->pressedThisPoll = false;
   }
-  return false;
+  else
+  { // Active low
+    p->pressedThisPoll = true;
+  }
+  if (p->pressedLastPoll == p->pressedThisPoll)
+  {
+    p->inState_ms += utils_elapsedU32Ticks(lastPoll_ms, ms_now);
+  }
+  else
+  { // Zero the counter on state change
+    Serial.printf("Pin %d change to %d at %d\n", p->pinNumber, p->pressedThisPoll, millis());
+    p->inState_ms = 0;
+  }
+}
+
+static void checkToStart(void)
+{
+  if (g_startButtonInfo.pressedThisPoll && g_startButtonInfo.inState_ms >= BUTTONS_DEBOUNCE_PRESS_MS)
+  {
+    Serial.printf("Moving from %d to START state\n", globalInts_getMachineState());
+    globalInts_setMachineState(machState_startEngine);
+  }
+}
+
+static void checkToIdle(buttonInfo_t *p)
+{
+  if (!p->pressedThisPoll && p->inState_ms >= BUTTONS_DEBOUNCE_RELEASE_MS)
+  { // If in non-pressed state for release debounce, the user released
+    Serial.printf("%d released for %d, to HYD idle at %d\n", p->pinNumber, p->inState_ms, millis());
+    globalInts_setMachineState(machState_runEngineHydIdle);
+  }
+}
+
+static void checkToFwd(void)
+{
+  // In this state, check for a debounced press of the FWD button
+  if (g_fwdButtonInfo.pressedThisPoll && g_fwdButtonInfo.inState_ms >= BUTTONS_DEBOUNCE_PRESS_MS)
+  {
+    Serial.printf("REV pressed for %d, from state %d to FWD state at %d\n", g_fwdButtonInfo.inState_ms, globalInts_getMachineState(), millis());
+    globalInts_setMachineState(machState_runEngineHydFwd);
+  }
+}
+
+static void checkToRev(void)
+{
+  if (g_revButtonInfo.pressedThisPoll && g_revButtonInfo.inState_ms >= BUTTONS_DEBOUNCE_PRESS_MS)
+  {
+    Serial.printf("REV pressed for %d, from state %d to REV state at %d\n", g_revButtonInfo.inState_ms, globalInts_getMachineState(), millis());
+    globalInts_setMachineState(machState_runEngineHydRev);
+  }
 }
 
 static void pollButtons(void)
 {
-  // Get button states
+  // Update button states
+  uint32_t ms_now = millis();
+  updateButtonState(&g_startButtonInfo, ms_now, g_lastButtonPoll_ms);
+  updateButtonState(&g_fwdButtonInfo, ms_now, g_lastButtonPoll_ms);
+  updateButtonState(&g_revButtonInfo, ms_now, g_lastButtonPoll_ms);
+
+  // Change state based on button pressed
   machineState_t currentState = globalInts_getMachineState();
   switch (currentState)
   {
   case machState_justPoweredOn:
   case machState_killEngine:
+    // In these states, check for a debounced press of the Start button
     checkToStart();
     break;
   case machState_startEngine:
-    if (!isLow(BUTTON_START_PIN))
-    {
-      Serial.println("Start released, releasing starter, enging HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
+    // Check for user release of Start button
+    checkToIdle(&g_startButtonInfo);
     break;
   case machState_runEngineHydIdle:
-    if (checkToStart())
-    {
-    }
-    else if (isLow(BUTTON_FWD_PIN))
-    {
-      Serial.println("FWD pressed, engine HYD FWD");
-      globalInts_setMachineState(machState_runEngineHydFwd);
-    }
-    else if (isLow(BUTTON_REV_PIN))
-    {
-      Serial.println("REV pressed, engine HYD REV");
-      globalInts_setMachineState(machState_runEngineHydRev);
-    }
+    // In this state, check for a debounced press of the Start button
+    checkToStart();
+    checkToFwd();
+    checkToRev(); // In this state, check for a debounced press of the Rev button
     break;
   case machState_runEngineHydFwd:
-    if (checkToStart())
-    {
-    }
-    if (!isLow(BUTTON_FWD_PIN))
-    {
-      Serial.println("FWD released, engine HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
+    checkToStart();
+    checkToIdle(&g_fwdButtonInfo); // Check for user release of FWD button
     break;
   case machState_runEngineHydRev:
-    if (checkToStart())
-    {
-    }
-    if (!isLow(BUTTON_REV_PIN))
-    {
-      Serial.println("REV released, engine HYD idle");
-      globalInts_setMachineState(machState_runEngineHydIdle);
-    }
+    checkToStart();
+    checkToIdle(&g_revButtonInfo); // Check for user release of REV button
     break;
   default:
+    Serial.printf("UNKNOWN state %d, going to justPoweredOn\n", currentState);
+    globalInts_setMachineState(machState_justPoweredOn);
     break;
   }
+
+  g_lastButtonPoll_ms = ms_now;
 }
 
 void pinStuff_init(void)

@@ -170,7 +170,7 @@ static void battMachStatePrint(void)
   displayInstance.drawString(0, 16, str);
 
   // Third line, machine state
-  index = sprintf(str, "State:%d,count %d", globalInts_getMachineState(), packetParser_getLastMachStV1SeqNo());
+  index = sprintf(str, "State:%d,seq %d", globalInts_getMachineState(), packetParser_getLastTxSeqNo());
   str[index] = 0;
   displayInstance.drawString(0, 32, str);
 

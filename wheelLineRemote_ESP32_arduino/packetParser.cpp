@@ -324,7 +324,6 @@ static void sendAckAckPacket(int16_t ackRxRSSI, int8_t ackRxSNR)
     Serial.print("Enqueued AckAck packet to ");
     printID(g_idToAck, false);
     Serial.printf(", seqNoToAck %d, ACK retries %d, ACK RX RSSI %d, their RSSI %d\n", g_receivedAckData.seqNoToAck, g_receivedAckData.ackResendCount, ackRxRSSI, g_receivedAckData.rxPacketRSSI);
-	
 }
 
 bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID)
@@ -342,9 +341,9 @@ bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID)
     return ret;
 }
 
-uint8_t packetParser_getLastMachStV1SeqNo(void)
+uint8_t packetParser_getLastTxSeqNo(void)
 {
-    return g_rxMachStateSeqNo;
+    return g_txMachStateSeqNo;
 }
 
 #define SEND_ERR_PRINT_ITVL_MS 500
@@ -358,14 +357,14 @@ void packetParser_poll(void)
     if (g_shouldAckMachState)
     { // Serial.printf("Should send ack:\n");
         sendAckPacket();
-		g_shouldAckMachState = false;
+        g_shouldAckMachState = false;
         Serial.printf("Sent ack at %d, awaiting ackAck\n", millis());
     }
     if (g_shouldAckAck)
     {
         // Serial.printf("Should send ackAck:\n");
         sendAckAckPacket(g_receivedAckRSSI, g_receivedAckSNR);
-g_shouldAckAck = false;
+        g_shouldAckAck = false;
         Serial.printf("Sent ackAck at %d, done awaiting replies\n", millis());
     }
     for (uint8_t i = 0; i < MAX_TX_PACKETS; i++)

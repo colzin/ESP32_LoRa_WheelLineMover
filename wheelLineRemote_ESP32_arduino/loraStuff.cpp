@@ -64,6 +64,7 @@
 
 #define MSEC_TO_RESET_RX 32000 // Probes should report every 30 sec
 
+#define LORA_VERBOSITY 0 // 0=none, 1=some, 2=more
 /*******************************************************************************
  * Variables
  ******************************************************************************/
@@ -115,7 +116,9 @@ static void onRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
     g_expectingReply = false;
     Radio.Sleep();            // Sleep here, to stop Rx timers.
     pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
     Serial.printf("onRxDone, set expectingReply false, parsing then going to sleep at %d.\n", millis());
+#endif // #if (LORA_VERBOSITY > 0)
     // TODO offload parsing to later? For now, try to keep this function short.
     g_lastRx_ms = millis();
     packetParser_parseLoRaData(payload, size, rssi, snr);
@@ -125,7 +128,9 @@ static void onRxTimeout(void)
     RadioState_t oldState = Radio.GetStatus();
     Radio.Sleep();            // Leave in sleep
     pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
     Serial.printf("RxTimeout at %d, %s, state %d\n", millis(), g_expectingReply ? "Was expecting reply" : "", oldState);
+#endif // #if (LORA_VERBOSITY > 0)
     if (g_expectingReply)
     {                                         // If we didn't receive an ACK, max out our power
         loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
@@ -137,7 +142,9 @@ static void onRxError(void)
 {
     Radio.Sleep();            // Leave in sleep
     pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
     Serial.printf("RxError at %d, %s\n", millis(), g_expectingReply ? "Was expecting reply" : "");
+#endif // #if (LORA_VERBOSITY > 0)
     if (g_expectingReply)
     {                                         // If we didn't receive an ACK, max out our power
         loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
@@ -147,9 +154,11 @@ static void onRxError(void)
 
 static void onCadDone(bool channelActivityDetected)
 {
-    // Radio.Sleep();            // Leave in sleep
-    // pinStuff_setLED(led_off); // Turn off when not RX or TX
+// Radio.Sleep();            // Leave in sleep
+// pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
     Serial.printf("CadDone at %d, CAD %d\n", millis(), channelActivityDetected);
+#endif // #if (LORA_VERBOSITY > 0)
 }
 
 static void onTxDone(void)
@@ -160,7 +169,9 @@ static void onTxDone(void)
     {
         Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK. Timeout doesn't seem to work.
         pinStuff_setLED(led_weak); // Turn weak for RX
+#if (LORA_VERBOSITY > 1)
         Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
+#endif // #if (LORA_VERBOSITY > 1)
         g_expectingReplyStart_ms = millis();
     }
 }
@@ -168,7 +179,9 @@ static void onTxTimeout(void)
 {
     Radio.Sleep();
     pinStuff_setLED(led_off); // Turn off when done
+#if (LORA_VERBOSITY > 0)
     Serial.printf("onTxTimeout, going to sleep at %d\n", millis());
+#endif // #if (LORA_VERBOSITY > 0)
 }
 
 static void dumpRegs(uint16_t startAddr, uint16_t len)
@@ -232,7 +245,9 @@ void loraStuff_radioPoll(void)
     RadioState_t radioState = Radio.GetStatus();
     if (g_expectingReply && RF_RX_RUNNING == radioState && utils_elapsedU32Ticks(g_expectingReplyStart_ms, ms_now) > AWAIT_ACK_MS)
     { // If timed out waiting for reply, go to idle mode
+#if (LORA_VERBOSITY > 0)
         Serial.printf("Rx for %d ms, force timeout at %d ms.\n", utils_elapsedU32Ticks(g_expectingReplyStart_ms, ms_now), ms_now);
+#endif                 // #if (LORA_VERBOSITY > 0)
         onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
     }
     if (utils_elapsedU32Ticks(g_lastRx_ms, ms_now) > MSEC_TO_RESET_RX)
@@ -326,7 +341,9 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         }
         else
         {
+#if (LORA_VERBOSITY > 0)
             Serial.printf("Tx start, expecting reply at %d, radio state %d, call timeout: ", millis(), Radio.GetStatus());
+#endif                     // #if (LORA_VERBOSITY > 0)
             onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
         }
     }
@@ -336,7 +353,9 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     case RF_IDLE:
         pinStuff_setLED(led_on); // Turn on for TX
         Radio.Send(txPtr, len);
+#if (LORA_VERBOSITY > 1)
         Serial.printf("  Radio idle, sending now: %d bytes, %d\n", len, millis());
+#endif // #if (LORA_VERBOSITY > 1)
         return send_success;
         break;
     case RF_TX_RUNNING:
@@ -356,7 +375,9 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         case RF_IDLE:
             pinStuff_setLED(led_on); // Turn on for TX
             Radio.Send(txPtr, len);
+#if (LORA_VERBOSITY > 0)
             Serial.printf("   Sent %d bytes, %d\n", len, millis());
+#endif // #if (LORA_VERBOSITY > 0)
             return send_success;
             break;
         default:
