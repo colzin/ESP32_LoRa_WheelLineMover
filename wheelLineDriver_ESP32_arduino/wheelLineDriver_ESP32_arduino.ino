@@ -1,17 +1,16 @@
 
 #include "Arduino.h"
 
-#include "defines.h"
-#include "globalInts.h"
+#include "defines.h" // Controls compile and runtime
+
+#include "ESP32_Mcu.h"
+#include "esp_system.h"
+#include "globalInts.h" // For machine state
 #include "loraStuff.h"
 #include "oledStuff.h"
 #include "packetParser.h"
 #include "pinStuff.h"
 #include "utils.h"
-
-#include "ESP32_Mcu.h"
-
-#include "esp_system.h"
 
 #include "serialInput.h"
 
@@ -27,8 +26,6 @@
  * Variables
  ******************************************************************************/
 
-static uint64_t g_chipID;
-
 #if USE_TASK_WATCHDOG
 #include <esp_task_wdt.h>
 #define TASK_WDT_TIMEOUT_SEC 5 // Wait this long before WDT panic
@@ -43,26 +40,24 @@ void setup()
   Serial.begin(SERIAL_BAUD_RATE);
   Serial.println("WheelLineDriver start");
   Mcu.begin();
-
-  globalInts_setMachineState(machState_killEngine); // Default to kill unless told otherwise
-  pinStuff_init();
-  pinStuff_setLED(led_weak);
-
-  g_chipID = ESP.getEfuseMac();
-  Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(g_chipID >> 32), (uint32_t)g_chipID);
+  globalInts_setChipIDU64(ESP.getEfuseMac());
+  Serial.printf("ESP32ChipID 0x%08x%08x\n", (uint32_t)(globalInts_getChipIDU64() >> 32), (uint32_t)globalInts_getChipIDU64());
   Serial.printf("ESP32 Chip model = %s Rev %d, %d cores\n", ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores());
 
   // Serial.printf("\nROM_core0 reason %d, ROM_core1 reason %d, rtc_0 reason %d, RTC_1 reason %d\n",
   //                 esp_rom_get_reset_reason(0), esp_rom_get_reset_reason(1), rtc_get_reset_reason(0), rtc_get_reset_reason(1));
 
+  globalInts_setMachineState(machState_killEngine); // Default to kill unless told otherwise
+  pinStuff_init();
+  pinStuff_setLED(led_weak);
   oledStuff_displayInit();
 
-  // oledStuff_printESPInfo(ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getFlashChipSize(), g_chipID);
+  oledStuff_printESPInfo(ESP.getChipModel(), ESP.getChipRevision(), ESP.getChipCores(), ESP.getFlashChipSize(), globalInts_getChipIDU64());
 
   // Init packet parser, then radio
 
 #if LORA
-  packetParser_init(g_chipID);
+  packetParser_init(globalInts_getChipIDU64());
   loraStuff_initRadio();
 
 #endif // #if LORA
@@ -125,5 +120,5 @@ void loop()
   oledStuff_printersPoll();
   // done, sleep
   // pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
-  yield();                   // Yield until the next tick
+  yield(); // Yield until the next tick
 }

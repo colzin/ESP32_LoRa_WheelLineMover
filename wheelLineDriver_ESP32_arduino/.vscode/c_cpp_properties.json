@@ -217,10 +217,10 @@
                 "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\tools\\sdk\\esp32s3\\qio_qspi\\include",
                 "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\cores\\esp32",
                 "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\variants\\WIFI_LoRa_32_V3",
-                "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\DISPLAY\\src",
-                "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\Wire\\src",
                 "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\LoraWan102\\src",
                 "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\SPI\\src",
+                "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\DISPLAY\\src",
+                "C:\\Users\\Collin\\AppData\\Local\\Arduino15\\packages\\Heltec-esp32\\hardware\\esp32\\0.0.7\\libraries\\Wire\\src",
                 "c:\\users\\collin\\appdata\\local\\arduino15\\packages\\heltec-esp32\\tools\\xtensa-esp32s3-elf-gcc\\gcc8_4_0-esp-2021r2-patch3\\xtensa-esp32s3-elf\\include\\c++\\8.4.0",
                 "c:\\users\\collin\\appdata\\local\\arduino15\\packages\\heltec-esp32\\tools\\xtensa-esp32s3-elf-gcc\\gcc8_4_0-esp-2021r2-patch3\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\xtensa-esp32s3-elf",
                 "c:\\users\\collin\\appdata\\local\\arduino15\\packages\\heltec-esp32\\tools\\xtensa-esp32s3-elf-gcc\\gcc8_4_0-esp-2021r2-patch3\\xtensa-esp32s3-elf\\include\\c++\\8.4.0\\backward",
@@ -588,8 +588,7 @@
                 "__ATOMIC_ACQ_REL=4",
                 "__ATOMIC_RELEASE=3",
                 "USBCON"
-            ],
-            "compileCommands": "${workspaceFolder}/build/compile_commands.json"
+            ]
         }
     ]
 }

@@ -61,14 +61,23 @@ void setup()
   // Init packet parser, then radio
 
 #if LORA
-  // Set our destination ID
-  g_destID[0] = 0x01;
-  g_destID[1] = 0x02;
-  g_destID[2] = 0x03;
-  g_destID[3] = 0x04;
-  g_destID[4] = 0x05;
-  g_destID[5] = 0x06;
+  // Init packet parser with our ID
   packetParser_init(globalInts_getChipIDU64());
+  // Set our destination ID
+  // bc 7f 43 fa 12 f4
+  g_destID[0] = 0xbc;
+  g_destID[1] = 0x7f;
+  g_destID[2] = 0x43;
+  g_destID[3] = 0xfa;
+  g_destID[4] = 0x12;
+  g_destID[5] = 0xf4;
+  Serial.print("Destination (other end) ID: 0x ");
+  for (uint8_t i = 0; i < CHIPID_LEN_BYTES; i++)
+  {
+    Serial.printf("%02x ", g_destID[i]);
+  }
+  Serial.printf("\n");
+
   loraStuff_initRadio();
 
 #endif // #if LORA
@@ -102,13 +111,14 @@ void loop()
 
   if (utils_elapsedU32Ticks(g_lastMachStateSend_ms, millis()) > MACHSTATE_SEND_ITVL_MS)
   {
-    // Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
+    Serial.printf("Sending machine state %d at %d\n", globalInts_getMachineState(), millis());
     packetParser_sendMachStateV1Packet((uint8_t)globalInts_getMachineState(), g_destID);
     g_lastMachStateSend_ms = millis();
   }
 #endif // #if LORA
 
   oledStuff_printersPoll();
+  // done, sleep
   // pinStuff_setLED(led_weak); // Back to weak for sleep. If we never wake, it'll be constant
   yield(); // Yield until the next tick
 }

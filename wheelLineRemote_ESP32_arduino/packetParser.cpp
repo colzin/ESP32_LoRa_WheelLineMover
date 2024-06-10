@@ -413,7 +413,7 @@ g_shouldAckAck = false;
 void packetParser_init(uint64_t ourChipIDU64)
 {
     writeU64ChipID(g_ourChipID, ourChipIDU64);
-    Serial.print("PacketParser init as ");
+    Serial.print("PacketParser init as 0x ");
     printID(g_ourChipID, true);
     g_txMachStateSeqNo = 0; // Only on Remote
     g_ackResendCnt = 0;

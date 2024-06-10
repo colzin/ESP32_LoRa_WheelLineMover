@@ -227,6 +227,9 @@ static void adcPoll(void)
       counts *= 49;
       counts /= 10;
       counts /= 4095;
+      // CBM measured 4186 actual, MCU reported 4260
+      counts *= 4186;
+      counts /= 4260;
       g_lastBatt_mV = counts;
       digitalWrite(ADC_CTRL_GPIO, 1); // Drive high to save power (de-selects ADC mux)
       g_lastAdcPoll_ms = millis();

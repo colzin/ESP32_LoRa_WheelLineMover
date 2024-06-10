@@ -14,9 +14,9 @@ extern "C"
      ******************************************************************************/
 
 /* Transmission of 5-byte packet with bandwitdh 0, SF 8, codingrate 4, preamble 8, CRC on
- * took 6ms on pins, but printouts said 131ms
+ * took 6ms on pins, but printouts said 140ms
  */
-#define LORA_TX_TIMEOUT 150 // Transmission timeout [ms]
+#define LORA_TX_TIMEOUT 161 // Transmission timeout [ms]
 
 // Wait for it to receive (), parse, then send a reply in this much time.
 #define RX_AND_PARSE_TIMEOUT_MS 50

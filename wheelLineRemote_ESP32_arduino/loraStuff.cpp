@@ -122,24 +122,45 @@ static void onRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 }
 static void onRxTimeout(void)
 {
+    RadioState_t oldState = Radio.GetStatus();
     Radio.Sleep();            // Leave in sleep
     pinStuff_setLED(led_off); // Turn off when not RX or TX
-    Serial.printf("RxTimeout at %d, %s\n", millis(), g_expectingReply ? "Was expecting reply" : "");
+    Serial.printf("RxTimeout at %d, %s, state %d\n", millis(), g_expectingReply ? "Was expecting reply" : "", oldState);
     if (g_expectingReply)
     {                                         // If we didn't receive an ACK, max out our power
         loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
         g_expectingReply = false;
     }
 }
+
+static void onRxError(void)
+{
+    Radio.Sleep();            // Leave in sleep
+    pinStuff_setLED(led_off); // Turn off when not RX or TX
+    Serial.printf("RxError at %d, %s\n", millis(), g_expectingReply ? "Was expecting reply" : "");
+    if (g_expectingReply)
+    {                                         // If we didn't receive an ACK, max out our power
+        loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
+        g_expectingReply = false;
+    }
+}
+
+static void onCadDone(bool channelActivityDetected)
+{
+    // Radio.Sleep();            // Leave in sleep
+    // pinStuff_setLED(led_off); // Turn off when not RX or TX
+    Serial.printf("CadDone at %d, CAD %d\n", millis(), channelActivityDetected);
+}
+
 static void onTxDone(void)
 {
     Radio.Sleep();
     pinStuff_setLED(led_off); // Turn off when done
     if (g_expectingReply)
     {
-        Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK
+        Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK. Timeout doesn't seem to work.
         pinStuff_setLED(led_weak); // Turn weak for RX
-        // Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
+        Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
         g_expectingReplyStart_ms = millis();
     }
 }
@@ -167,6 +188,8 @@ void loraStuff_initRadio(void)
     g_radioEvents.TxTimeout = onTxTimeout;
     g_radioEvents.RxDone = onRxDone;
     g_radioEvents.RxTimeout = onRxTimeout;
+    g_radioEvents.RxError = onRxError;
+    g_radioEvents.CadDone = onCadDone;
     Radio.Init(&g_radioEvents);
     Radio.SetChannel(RF_FREQUENCY);
 #if ALLOW_CHANGING_TX_POWER
@@ -205,15 +228,13 @@ void loraStuff_radioPoll(void)
     }
 #endif // #if REG_DUMP_POLL_ITVL_MS
 
-    // if (RF_IDLE == Radio.GetStatus())
-    // {
-    //     Serial.println(" Detected radio idle, starting infinite RX until next packet");
-    //     g_expectingReply = false;
-    //     Radio.Rx(0);
-    //     pinStuff_setLED(led_weak); // Turn weak for RX
-    // }
     uint32_t ms_now = millis();
-
+    RadioState_t radioState = Radio.GetStatus();
+    if (g_expectingReply && RF_RX_RUNNING == radioState && utils_elapsedU32Ticks(g_expectingReplyStart_ms, ms_now) > AWAIT_ACK_MS)
+    { // If timed out waiting for reply, go to idle mode
+        Serial.printf("Rx for %d ms, force timeout at %d ms.\n", utils_elapsedU32Ticks(g_expectingReplyStart_ms, ms_now), ms_now);
+        onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
+    }
     if (utils_elapsedU32Ticks(g_lastRx_ms, ms_now) > MSEC_TO_RESET_RX)
     {
         if (utils_elapsedU32Ticks(g_lastRadioReset_ms, ms_now) > MSEC_TO_RESET_RX)
@@ -305,7 +326,7 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         }
         else
         {
-            Serial.printf("Tx start, awaiting reply at %d, call timeout: ", millis());
+            Serial.printf("Tx start, expecting reply at %d, radio state %d, call timeout: ", millis(), Radio.GetStatus());
             onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
         }
     }
