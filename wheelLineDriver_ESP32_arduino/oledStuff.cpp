@@ -13,7 +13,6 @@
 
 #if BATT_MACHSTATE_PRINT_TO_OLED
 // #include "board.h"
-#include "esp32-hal-adc.h"
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 
 /*******************************************************************************
@@ -152,13 +151,8 @@ void oledStuff_printMachStateV1Packet(rxPacket_t *pRxPacket, machStateV1Packet_t
 }
 
 #if BATT_MACHSTATE_PRINT_TO_OLED
-static int32_t getBatterymV(void)
-{
-  int32_t mV2 = analogReadMilliVolts(1);
-  return mV2;
-}
 
-static char *states[] = {"PON_kill", "START", "runIdle", "runFWD", "runREV", "KILL"};
+static const char *states[] = {"PON_kill", "START", "runIdle", "runFWD", "runREV", "KILL"};
 
 static void battMachStatePrint(void)
 {
@@ -169,7 +163,7 @@ static void battMachStatePrint(void)
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   uint32_t index = 0;
   rxPacket_t *pRxHeader = packetParser_getLastMachStateV1Header();
-  uint8_t seqNo = packetParser_getLastMachStV1SeqNo();
+  uint8_t seqNo = packetParser_getLastRxSeqNo();
   index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "%05d,TX%d,RX%d,SNR%d", seqNo, pRxHeader->txdBm, pRxHeader->rxRSSI, pRxHeader->rxSNR);
   str[index] = 0;
   // Serial.printf("%s,\n", str);

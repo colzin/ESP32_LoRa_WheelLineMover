@@ -64,17 +64,30 @@
 
 #define MSEC_TO_RESET_RX 32000 // Probes should report every 30 sec
 
+#define LORA_VERBOSITY 3 // 0=none, 1=some, 2=more
+
+typedef enum
+{
+    expect_nothing = 0,
+    expect_ack,
+    expect_ackAck,
+} replyExpected_t;
+
 /*******************************************************************************
  * Variables
  ******************************************************************************/
 
 static int16_t g_currentTxdBm;
-static bool g_expectingReply;
+static packetType_t g_txPacketType;
+static const char *expectedReplies[] = {"none", "ack", "ackAck"};
+static replyExpected_t g_expectedReply;
 static uint32_t g_expectingReplyStart_ms;
 static uint32_t g_lastRx_ms, g_lastRadioReset_ms;
 static int16_t rssi, rxSize;
 
 static RadioEvents_t g_radioEvents;
+
+static uint32_t g_idleMs, g_lastPoll_ms;
 
 // No LoRaWAN on these, they are simple to test with
 
@@ -112,34 +125,99 @@ static void setLoRaConfig(int32_t txPower)
 
 static void onRxDone(uint8_t *payload, uint16_t size, int16_t rssi, int8_t snr)
 {
-    g_expectingReply = false;
+    g_expectedReply = expect_nothing;
     Radio.Sleep();            // Sleep here, to stop Rx timers.
     pinStuff_setLED(led_off); // Turn off when not RX or TX
-    Serial.printf("onRxDone, set expectingReply false, parsing then going to sleep at %d.\n", millis());
-    // TODO offload parsing to later? For now, try to keep this function short.
     g_lastRx_ms = millis();
+#if (LORA_VERBOSITY > 0)
+    Serial.printf("RxDone at %d: ", g_lastRx_ms);
+#endif // #if (LORA_VERBOSITY > 0)
+    // TODO offload parsing to later? For now, try to keep this function short.
     packetParser_parseLoRaData(payload, size, rssi, snr);
 }
 static void onRxTimeout(void)
 {
-    Radio.Sleep();            // Leave in sleep
-    pinStuff_setLED(led_off); // Turn off when not RX or TX
-    Serial.printf("RxTimeout at %d, %s\n", millis(), g_expectingReply ? "Was expecting reply" : "");
-    if (g_expectingReply)
+// Remote does this, Driver doesn't	    Radio.Sleep();            // Leave in sleep
+// Remote does this, Driver doesn't    pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
+    Serial.printf("RxTimeout at %d, was expecting %s\n", millis(), expectedReplies[g_expectedReply]);
+#endif // #if (LORA_VERBOSITY > 0)
+    if (expect_nothing != g_expectedReply)
     {                                         // If we didn't receive an ACK, max out our power
         loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
-        g_expectingReply = false;
+        g_expectedReply = expect_nothing;
     }
+    // driver goes back to RX indefinitely
+    Radio.Rx(0); // Send back to RX forever
+    Serial.printf("RxTimeout, going to RX for next packet at %d\n", millis());
 }
+
+static void onRxError(void)
+{
+    Radio.Sleep();            // Leave in sleep
+    pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
+    Serial.printf("RxError at %d, expecting %s\n", millis(), expectedReplies[g_expectedReply]);
+#endif // #if (LORA_VERBOSITY > 0)
+    if (expect_nothing != g_expectedReply)
+    {                                         // If we didn't receive an ACK, max out our power
+        loraStuff_adjustTxPwr(MIN_RSSI - 10); // Go up by 10dBm
+        g_expectedReply = expect_nothing;
+    }
+    // driver goes back to RX indefinitely
+    Radio.Rx(0); // Send back to RX forever
+    Serial.printf("RxTimeout, going to RX for next packet at %d\n", millis());
+}
+
+static void onCadDone(bool channelActivityDetected)
+{
+// Radio.Sleep();            // Leave in sleep
+// pinStuff_setLED(led_off); // Turn off when not RX or TX
+#if (LORA_VERBOSITY > 0)
+    Serial.printf("CadDone at %d, CAD %d\n", millis(), channelActivityDetected);
+#endif // #if (LORA_VERBOSITY > 0)
+}
+
+static void setExpectedReply(packetType_t packetType)
+{ // Don't allow sending more packets while we await a reply
+    switch (packetType)
+    {
+    case packetType_ack:
+        g_expectedReply = expect_ackAck;
+        break;
+    case packetType_ackAck:
+        g_expectedReply = expect_nothing;
+        break;
+    case packetType_machStateV1:
+        g_expectedReply = expect_ack;
+        break;
+    default:
+        g_expectedReply = expect_nothing;
+        break;
+    }
+    // Serial.printf("Setting g_expectedReply to %s\n", expectedReplies[g_expectedReply]);
+}
+
 static void onTxDone(void)
 {
-    Radio.Sleep();
-    pinStuff_setLED(led_off); // Turn off when done
-    if (g_expectingReply)
+    pinStuff_setLED(led_off); // Turn off LED, done with TX
+    setExpectedReply(g_txPacketType);
+    if (expect_nothing == g_expectedReply)
+    { // Driver will Rx, Remote will sleep here
+        // Remote does this Radio.Sleep();
+        // Remote does this pinStuff_setLED(led_off); // Turn off when done
+        // Since we are hub, always Rx indefinitely to listen to ACKs or other senders
+        Radio.Rx(0);               // Rx forever for next packet
+        pinStuff_setLED(led_weak); // Turn off when done
+						Serial.printf("TxDone, SRX at %d\n", millis());
+    }
+    else
     {
-        Radio.Rx(AWAIT_ACK_MS);    // Rx for ACK
+        Radio.Rx(AWAIT_ACK_MS);    // Rx for reply. Timeout doesn't seem to work.
         pinStuff_setLED(led_weak); // Turn weak for RX
-        // Serial.printf("onTxDone, going to RX for %d at %d\n", AWAIT_ACK_MS, millis());
+#if (LORA_VERBOSITY > 1)
+        Serial.printf("TxDone, going to RX for %d at %d, expecting %s\n", AWAIT_ACK_MS, millis(), expectedReplies[g_expectedReply]);
+#endif // #if (LORA_VERBOSITY > 1)
         g_expectingReplyStart_ms = millis();
     }
 }
@@ -147,7 +225,11 @@ static void onTxTimeout(void)
 {
     Radio.Sleep();
     pinStuff_setLED(led_off); // Turn off when done
-    Serial.printf("onTxTimeout, going to sleep at %d\n", millis());
+#if (LORA_VERBOSITY > 0)
+    Serial.printf("TxTimeout, going to sleep at %d\n", millis());
+#endif // #if (LORA_VERBOSITY > 0)
+    // We failed to send, clear expectedReply
+    g_expectedReply = expect_nothing;
 }
 
 static void dumpRegs(uint16_t startAddr, uint16_t len)
@@ -167,6 +249,8 @@ void loraStuff_initRadio(void)
     g_radioEvents.TxTimeout = onTxTimeout;
     g_radioEvents.RxDone = onRxDone;
     g_radioEvents.RxTimeout = onRxTimeout;
+    g_radioEvents.RxError = onRxError;
+    g_radioEvents.CadDone = onCadDone;
     Radio.Init(&g_radioEvents);
     Radio.SetChannel(RF_FREQUENCY);
 #if ALLOW_CHANGING_TX_POWER
@@ -176,13 +260,7 @@ void loraStuff_initRadio(void)
 #endif // #if ALLOW_CHANGING_TX_POWER
     Radio.Sleep();
     pinStuff_setLED(led_off); // Turn off when not RX or TX
-    g_expectingReply = false;
-}
-
-void loraStuff_setExpectingReply(bool isReplyExpected)
-{ // Don't allow sending more packets while we await a reply
-    // Serial.printf("Setting g_expectingReply to %d\n", isReplyExpected);
-    g_expectingReply = isReplyExpected;
+    g_expectedReply = expect_nothing;
 }
 
 #define REG_DUMP_POLL_ITVL_MS 0
@@ -205,15 +283,8 @@ void loraStuff_radioPoll(void)
     }
 #endif // #if REG_DUMP_POLL_ITVL_MS
 
-    if (RF_IDLE == Radio.GetStatus())
-    {
-        Serial.println(" Detected radio idle, starting infinite RX until next packet");
-        g_expectingReply = false;
-        Radio.Rx(0);
-        pinStuff_setLED(led_weak); // Turn weak for RX
-    }
     uint32_t ms_now = millis();
-
+    // Remote does an Rx timeout here, Driver doesn't do that, it waits forever for next packet.
     if (utils_elapsedU32Ticks(g_lastRx_ms, ms_now) > MSEC_TO_RESET_RX)
     {
         if (utils_elapsedU32Ticks(g_lastRadioReset_ms, ms_now) > MSEC_TO_RESET_RX)
@@ -230,6 +301,22 @@ void loraStuff_radioPoll(void)
             g_lastRadioReset_ms = ms_now;
         }
     }
+    if (RF_IDLE == Radio.GetStatus())
+    {
+        g_idleMs += utils_elapsedU32Ticks(g_lastPoll_ms, ms_now);
+        if (g_idleMs >= RX_TO_TX_DELAY_MS + 12)
+        {
+            Serial.printf(" Radio idle for %d, SRX\n", g_idleMs);
+            g_expectedReply = expect_nothing;
+            Radio.Rx(0);
+            pinStuff_setLED(led_weak); // Turn weak for RX
+        }
+    }
+    else
+    {
+        g_idleMs = 0;
+    }
+    g_lastPoll_ms = millis();
 }
 
 int8_t loraStuff_getCurrentTxdBm(void)
@@ -284,19 +371,19 @@ void loraStuff_adjustTxPwr(int16_t theirRSSI)
     }
 }
 
-sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
+sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len, packetType_t packetType)
 {
     if (len > 255)
     {
         Serial.printf("LoRa can only send 255 byte packets, can't send %d\n", len);
         return sendFail_dataTooLong;
     }
-    if (utils_elapsedU32Ticks(g_lastRx_ms, millis()) < 100)
+    if (utils_elapsedU32Ticks(g_lastRx_ms, millis()) < RX_TO_TX_DELAY_MS)
     {
         // Serial.printf("<100ms since RX, need to wait\n");
         return sendFail_needToWait;
     }
-    if (g_expectingReply)
+    if (expect_nothing != g_expectedReply)
     {
         if (utils_elapsedU32Ticks(g_expectingReplyStart_ms, millis()) < AWAIT_ACK_MS)
         {
@@ -305,7 +392,9 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         }
         else
         {
-            Serial.printf("Tx start, awaiting reply at %d, call timeout: ", millis());
+#if (LORA_VERBOSITY > 0)
+            Serial.printf("Radio state %d, need to switch to TX at %d, call timeout: ", Radio.GetStatus(), millis());
+#endif                     // #if (LORA_VERBOSITY > 0)
             onRxTimeout(); // Call the function that would be called by timeout, to handle timeout
         }
     }
@@ -315,18 +404,22 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
     case RF_IDLE:
         pinStuff_setLED(led_on); // Turn on for TX
         Radio.Send(txPtr, len);
-        Serial.printf("  Radio idle, sending now: %d bytes, %d\n", len, millis());
+        g_txPacketType = packetType;
+#if (LORA_VERBOSITY > 1)
+        // Serial.printf("  Radio idle, sending %d bytes at %d, should take %d\n", len, millis(), Radio.TimeOnAir(MODEM_LORA, len));
+        Serial.printf(" idle STX %d bytes at %d\n", len, millis());
+#endif // #if (LORA_VERBOSITY > 1)
         return send_success;
         break;
     case RF_TX_RUNNING:
         // Don't print error, this is fine, retry later.
-        Serial.println("TX already running");
+        // Serial.println("  TX already running, retry later");
         return sendFail_txAlreadyRunning;
         break;
     case RF_RX_RUNNING:
         // Check above if we are awaiting a reply, no matter what mode we are in at the moment.
         // If here, we know we are not awaiting a reply, so we can change modes.
-        Serial.printf("  Sleeping radio to send\n");
+        Serial.printf("  Sleeping radio to send: ");
         Radio.Sleep();
         pinStuff_setLED(led_off); // Turn off when not RX or TX
         radioState = Radio.GetStatus();
@@ -335,7 +428,11 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len)
         case RF_IDLE:
             pinStuff_setLED(led_on); // Turn on for TX
             Radio.Send(txPtr, len);
-            Serial.printf("   Sent %d bytes, %d\n", len, millis());
+            g_txPacketType = packetType;
+#if (LORA_VERBOSITY > 0)
+            // Serial.printf(" sending %d bytes at %d, should take %d\n", len, millis(), Radio.TimeOnAir(MODEM_LORA, len));
+            Serial.printf(" afterSleep STX %d bytes at %d\n", len, millis());
+#endif // #if (LORA_VERBOSITY > 0)
             return send_success;
             break;
         default:

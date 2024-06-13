@@ -32,8 +32,10 @@ typedef struct
 {
     uint8_t pBuffer[MAX_PACKET_LEN];
     uint32_t size;
-    bool expectReply;
+    packetType_t type;
 } txPacket_t;
+
+#define SEND_ERR_PRINT_ITVL_MS 102
 
 /*******************************************************************************
  * Variables
@@ -46,11 +48,10 @@ static uint8_t g_txMachStateSeqNo;
 
 // Keep track of the stats on the last packet received, and last ack packet received.
 static bool g_shouldAckMachState = false;
+static rxPacket_t g_lastMachStateV1Header; // The packet header (contains seq no, RSSI, SNR)
 static uint8_t g_idToAck[CHIPID_LEN_BYTES];
-static int16_t g_rxMachStateRSSI;  // how strongly we received it
-static uint8_t g_rxMachStateSeqNo; // the sequence number of the packet sent to us
-static uint8_t g_ackResendCnt;     // How many times we have re-sent this ACK
-static int8_t g_rxMachStateSNR;
+
+static uint8_t g_ackResendCnt; // How many times we have re-sent this ACK
 
 // Store data from the last received ACK
 static bool g_shouldAckAck = false;
@@ -64,8 +65,9 @@ static senderState_t g_sendState;
 #define MAX_TX_PACKETS 5
 static txPacket_t g_txSlots[MAX_TX_PACKETS];
 
-static rxPacket_t g_lastMachStateV1Header;
 static uint32_t g_lastV1PacketRx_ms;
+
+static const char *g_sendErrors[sendFail_count] = {"Success", "txAlreadyRunning", "awaitingReply", "error", "inOtherState", "dataTooLong", "sendFail_needToWait"};
 
 /*******************************************************************************
  * Prototypes
@@ -79,7 +81,7 @@ static void sendAckPacket(void);
  * Code
  ******************************************************************************/
 
-static bool enqueuePacket(uint8_t *pkt, uint32_t len, bool expectReply)
+static bool enqueuePacket(uint8_t *pkt, uint32_t len, packetType_t packetType)
 {
     for (uint8_t i = 0; i < MAX_TX_PACKETS; i++)
     {
@@ -87,8 +89,8 @@ static bool enqueuePacket(uint8_t *pkt, uint32_t len, bool expectReply)
         { // Copy in the data, populate the length
             memcpy(&g_txSlots[i].pBuffer, pkt, len);
             g_txSlots[i].size = len;
-            g_txSlots[i].expectReply = expectReply;
-            // Serial.printf("Filled Tx slot %d with len %d\n", i, len);
+            g_txSlots[i].type = packetType;
+            // Serial.printf("Filled Tx slot %d with type %d, len %d\n", i, packetType, len);
             return true;
         }
     }
@@ -148,10 +150,10 @@ static void parseAckPacket(rxPacket_t *pkt)
     pkt->pData = ReadBEUint8(pkt->pData, &g_receivedAckData.ackResendCount); // The seq number of the packet we sent to them
     pkt->pData = ReadBEInt8(pkt->pData, &g_receivedAckData.rxPacketSNR);     // RSSI of the packet by them
     // If they sent us an ACK, that tells us how strong they received our original packet, so we can adjust TX strength.
-    Serial.printf("    We received ACK that said they received our packet at RSSI %d, SNR %d\n", g_receivedAckData.rxPacketRSSI, g_receivedAckData.rxPacketSNR);
+    // Serial.printf("    We received ACK that said they received our packet at RSSI %d, SNR %d\n", g_receivedAckData.rxPacketRSSI, g_receivedAckData.rxPacketSNR);
     loraStuff_adjustTxPwr(g_receivedAckData.rxPacketRSSI);
     // TODO sequence number tracking/ACKing later
-    Serial.printf("    Received ACK for our seq no %d, they sent %d times\n", g_rxMachStateSeqNo, g_receivedAckData.ackResendCount);
+    // Serial.printf("    Received ACK for our seq no %d, they sent %d times\n", g_lastMachStateV1Header.seqNo, g_receivedAckData.ackResendCount);
     // Do not send reply in parser
 #if PACKET_PRINT_TO_OLED
     // oledStuff_printAckPacket(pkt, &ackData); Too verbose
@@ -161,6 +163,8 @@ static void parseAckPacket(rxPacket_t *pkt)
     g_receivedAckRSSI = pkt->rxRSSI;
     g_receivedAckSNR = pkt->rxSNR;
     // TODO trigger send of ACKACK packet
+    g_shouldAckAck = true;
+    Serial.printf("Parsed ack at %d\n", millis());
 }
 
 static void parseAckAckPacket(rxPacket_t *pkt)
@@ -175,15 +179,17 @@ static void parseAckAckPacket(rxPacket_t *pkt)
     pkt->pData = ReadBEUint8(pkt->pData, &ackAckData.ackResendCount); // SeqNo of the ACK we sent to them
 
     // If they sent us an ackAck, that tells us how strong they received our ack packet, so we can adjust TX strength.
-    Serial.printf("    We received ackACK that said they received our ack packet at RSSI %d, SNR %d\n", ackAckData.ackPacketRSSI, ackAckData.ackPacketSNR);
+    // Serial.printf("    We received ackACK that said they received our ack packet at RSSI %d, SNR %d\n", ackAckData.ackPacketRSSI, ackAckData.ackPacketSNR);
     loraStuff_adjustTxPwr(ackAckData.ackPacketRSSI);
     // TODO sequence number tracking/ACKing later
-    // Serial.printf("    Received ACKACK for our seq no %d, ack %d, ackAck %d!\n", ackAckData.seqNoToAckAck, ackAckData.seqNoToAck, ackAckData.seqNo);
+    // Serial.printf("    Received ACKACK for our seq no %d, ackResendCount %d!\n", ackAckData.seqNo, ackAckData.ackResendCount);
     // Do not send reply in parser
 
 #if PACKET_PRINT_TO_OLED
     // oledStuff_printAckAckPacket(pkt, &ackAckData); Too verbose
 #endif // #if PACKET_PRINT_TO_OLED
+
+    Serial.printf("Parsed ackAck at %d\n", millis());
 }
 
 static void parseMachstateV1Packet(rxPacket_t *pkt)
@@ -193,8 +199,8 @@ static void parseMachstateV1Packet(rxPacket_t *pkt)
     // Read the fields into the struct
     pkt->pData = ReadBEUint8(pkt->pData, &data.seqNo);
     pkt->pData = ReadBEUint8(pkt->pData, &data.machState);
-    Serial.printf("  Rx Seq no %d, Machine state %d\n", data.seqNo, data.machState);
     g_lastV1PacketRx_ms = millis();
+    Serial.printf("Rx Seq no %d, Machine state %d at %d\n", data.seqNo, data.machState, g_lastV1PacketRx_ms);
     globalInts_setMachineState((machineState_t)data.machState);
 
     // Print, act on, and ACK packet on Driver
@@ -205,6 +211,7 @@ static void parseMachstateV1Packet(rxPacket_t *pkt)
 
     // Store data in global vars to trigger an ACK send
     memcpy(g_idToAck, pkt->sourceChipID, CHIPID_LEN_BYTES);
+    g_shouldAckMachState = true;
 }
 
 rxPacket_t *packetParser_getLastMachStateV1Header(void)
@@ -252,7 +259,7 @@ void packetParser_parseLoRaData(const uint8_t *pData, uint16_t dataLen, const in
     // rxPacket.pData has now been advanced to start of packet data
 
     dataLen -= PACKET_HEADER_NUMBYTES; // Subtract the header bytes to let len equal the number of bytes remaining
-    Serial.printf("packet type %d, RSSI %d, SNR %d, len %d:\n", thisRXPkt.pktType, thisRXPkt.rxRSSI, thisRXPkt.rxSNR, dataLen);
+    Serial.printf("packet type %d, RSSI %d, SNR %d, len %d: ", thisRXPkt.pktType, thisRXPkt.rxRSSI, thisRXPkt.rxSNR, dataLen);
     switch ((packetType_t)thisRXPkt.pktType)
     {
     case packetType_ack:
@@ -312,17 +319,22 @@ static void sendAckPacket(void)
     uint8_t txPacket[PACKET_HEADER_NUMBYTES + ACK_PKTLEN_BYTES];
     uint8_t *ptr = populateHeader(txPacket, g_idToAck, packetType_ack);
     // Now populate stuff unique to ACK packet
-    ptr = WriteBEInt16(ptr, g_rxMachStateRSSI);
+    // RSSI that we received their command at
+    ptr = WriteBEInt16(ptr, g_lastMachStateV1Header.rxRSSI);
     // Set the seq number to ack.
-    ptr = WriteBEUint8(ptr, g_rxMachStateSeqNo);
+    ptr = WriteBEUint8(ptr, g_lastMachStateV1Header.seqNo);
     // Set the seqNo of this ACK, incrementing every re-send
     ptr = WriteBEUint8(ptr, g_ackResendCnt++);
     // Set the SNR that we received machState at
-    ptr = WriteBEInt8(ptr, g_rxMachStateSNR);
-    enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), true);
-    Serial.print("Enqueued ack packet to ");
-    printID(g_idToAck, false);
-    Serial.printf(", seq no %d, received with RSSI %d, SNR %d\n", g_rxMachStateSeqNo, g_rxMachStateRSSI, g_rxMachStateSNR);
+    ptr = WriteBEInt8(ptr, g_lastMachStateV1Header.rxSNR);
+    bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), packetType_ack);
+    if (ret)
+    {
+        Serial.printf("Enqueued ack packet at %d\n", millis());
+        // Serial.print(" to ");
+        // printID(g_idToAck, false);
+        // Serial.printf(", seq no %d, received with RSSI %d, SNR %d\n", g_lastMachStateV1Header.seqNo, g_lastMachStateV1Header.rxRSSI, g_lastMachStateV1Header.rxSNR);
+    }
 }
 
 static void sendAckAckPacket(int16_t ackRxRSSI, int8_t ackRxSNR)
@@ -342,10 +354,14 @@ static void sendAckAckPacket(int16_t ackRxRSSI, int8_t ackRxSNR)
     ptr = WriteBEUint8(ptr, g_receivedAckData.seqNoToAck);
     // Set the seq no of the ACK we received.
     ptr = WriteBEUint8(ptr, g_receivedAckData.ackResendCount);
-    enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), false);
-    Serial.print("Enqueued AckAck packet to ");
-    printID(g_idToAck, false);
-    Serial.printf(", seqNoToAck %d, ACK retries %d, ACK RX RSSI %d, their RSSI %d\n", g_receivedAckData.seqNoToAck, g_receivedAckData.ackResendCount, ackRxRSSI, g_receivedAckData.rxPacketRSSI);
+    bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), packetType_ackAck);
+    if (ret)
+    {
+        Serial.printf("Enqueued AckAck packet at %d\n", millis());
+        // Serial.print(" to ");
+        // printID(g_idToAckAck, false);
+        // Serial.printf(", seqNoToAck %d, ACK retries %d, ACK RX RSSI %d, their RSSI %d\n", g_receivedAckData.seqNoToAck, g_receivedAckData.ackResendCount, ackRxRSSI, g_receivedAckData.rxPacketRSSI);
+    }
 }
 
 bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID)
@@ -355,7 +371,7 @@ bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID)
     // Set our packet's bytes
     ptr = WriteBEUint8(ptr, g_txMachStateSeqNo++);
     ptr = WriteBEUint8(ptr, machState);
-    bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), true);
+    bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), packetType_machStateV1);
     if (!ret)
     {
         Serial.printf("FAILED to enqueue machStateV1 packet!\n");
@@ -363,70 +379,70 @@ bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID)
     return ret;
 }
 
-uint8_t packetParser_getLastMachStV1SeqNo(void)
+uint8_t packetParser_getLastRxSeqNo(void)
 {
-    return g_rxMachStateSeqNo;
+    return g_lastMachStateV1Header.seqNo;
 }
 
-#define SEND_ERR_PRINT_ITVL_MS 500
 #if SEND_ERR_PRINT_ITVL_MS
-static bool g_lastSendErrored;
+static sendFail_t g_lastSendError;
 static uint32_t g_lastSendErrPrint_ms;
 #endif // #if SEND_ERR_PRINT_ITVL_MS
 void packetParser_poll(void)
 {
     // check if we should send ACK and send it here.
     if (g_shouldAckMachState)
-    { // Serial.printf("Should send ack:\n");
+    {
         sendAckPacket();
         g_shouldAckMachState = false;
-        Serial.printf("Sent ack at %d, awaiting ackAck\n", millis());
     }
     if (g_shouldAckAck)
     {
-        // Serial.printf("Should send ackAck:\n");
         sendAckAckPacket(g_receivedAckRSSI, g_receivedAckSNR);
         g_shouldAckAck = false;
-        Serial.printf("Sent ackAck at %d, done awaiting replies\n", millis());
     }
     for (uint8_t i = 0; i < MAX_TX_PACKETS; i++)
     {
+        bool bailOut = false;
         if (g_txSlots[i].size)
         { // Copy in the data, populate the length
             uint32_t sendStart_ms = millis();
-            sendFail_t sendRet = loraStuff_send(g_txSlots[i].pBuffer, g_txSlots[i].size);
+            sendFail_t sendRet = loraStuff_send(g_txSlots[i].pBuffer, g_txSlots[i].size, g_txSlots[i].type);
             switch (sendRet)
             {
             case send_success:
             {
-                Serial.printf(" Just sent slot %d, length %d, at %d\n", i, g_txSlots[i].size, sendStart_ms);
+                // Serial.printf(" Just sent slot %d, length %d, at %d\n", i, g_txSlots[i].size, sendStart_ms);
                 g_txSlots[i].size = 0;
-                loraStuff_setExpectingReply(g_txSlots[i].expectReply);
-#if SEND_ERR_PRINT_ITVL_MS
-                // Set so first error will print
-                g_lastSendErrored = false;
-#endif // #if SEND_ERR_PRINT_ITVL_MS
+                bailOut = true; // It will be in TX, wait
                 return;
             }
             break;
             case sendFail_dataTooLong:
-                Serial.printf("Data too long error, throw out packet");
+                // Serial.printf("Data too long error, throw out packet");
                 g_txSlots[i].size = 0;
+                bailOut = false; // try another
                 break;
             default:
             {
-#if SEND_ERR_PRINT_ITVL_MS
-                if (!g_lastSendErrored || utils_elapsedU32Ticks(g_lastSendErrPrint_ms, millis()) > SEND_ERR_PRINT_ITVL_MS)
-                {
-                    g_lastSendErrPrint_ms = millis();
-                    Serial.printf(" Slot %d, length %d couldn't send at %d ms, error %d, retry later\n", i, g_txSlots[i].size, g_lastSendErrPrint_ms, sendRet);
-                }
-                g_lastSendErrored = true;
-#endif // #if SEND_ERR_PRINT_ITVL_MS
-                return;
+                // Serial.printf("Unknown send error %d\n", sendRet);
+                bailOut = true; // Maybe come back later
             }
             break;
             }
+#if SEND_ERR_PRINT_ITVL_MS
+            // if ((g_lastSendError != sendRet) || (utils_elapsedU32Ticks(g_lastSendErrPrint_ms, millis()) > SEND_ERR_PRINT_ITVL_MS))
+            if (g_lastSendError != sendRet)
+            {
+                g_lastSendErrPrint_ms = millis();
+                Serial.printf(" Slot %d, type %d, length %d sendRet %s at %d\n", i, g_txSlots[i].type, g_txSlots[i].size, g_sendErrors[sendRet], g_lastSendErrPrint_ms);
+                g_lastSendError = sendRet;
+            }
+#endif // #if SEND_ERR_PRINT_ITVL_MS
+        }
+        if (bailOut)
+        {
+            return;
         }
     }
 }
@@ -434,7 +450,7 @@ void packetParser_poll(void)
 void packetParser_init(uint64_t ourChipIDU64)
 {
     writeU64ChipID(g_ourChipID, ourChipIDU64);
-    Serial.print("PacketParser init as ");
+    Serial.print("PacketParser init as 0x ");
     printID(g_ourChipID, true);
     g_txMachStateSeqNo = 0; // Only on Remote
     g_ackResendCnt = 0;

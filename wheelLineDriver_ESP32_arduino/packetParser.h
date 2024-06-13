@@ -24,7 +24,9 @@ bool packetParser_sendMachStateV1Packet(uint8_t machState, uint8_t *pDestID);
 
 
 rxPacket_t *packetParser_getLastMachStateV1Header(void);
-uint8_t packetParser_getLastMachStV1SeqNo(void);
+
+uint8_t packetParser_getLastRxSeqNo(void);
+uint8_t packetParser_getLastTxSeqNo(void);
 
 uint32_t packetParser_lastMachV1PacketTimestamp(void);
 

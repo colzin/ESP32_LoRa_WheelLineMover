@@ -47,7 +47,7 @@ void globalInts_setMachineState(machineState_t st)
     {
         if (st != m_machState)
         {
-            Serial.printf("Machine state from %d to %d\n", m_machState, st);
+            Serial.printf("Machine state from %d to %d at %d\n", m_machState, st, millis());
         }
         m_machState = st;
     }

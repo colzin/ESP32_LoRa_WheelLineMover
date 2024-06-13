@@ -13,7 +13,6 @@
 
 #if BATT_MACHSTATE_PRINT_TO_OLED
 // #include "board.h"
-#include "esp32-hal-adc.h"
 #endif // #if BATT_MACHSTATE_PRINT_TO_OLED
 
 /*******************************************************************************
@@ -157,7 +156,7 @@ static void battMachStatePrint(void)
 {
   displayInstance.clear();
   displayInstance.setFont(ArialMT_Plain_16);
-  char str[64]; // Max of about 120 wide?
+  char str[MAX_SCREEN_WIDTH_CHARS + 1];
   // First line
   uint32_t index = sprintf(str, "Batt:%dmV,ID24:\n", pinStuff_getBatterymV());
   str[index] = 0;

@@ -51,7 +51,7 @@ extern "C"
                 uint8_t ackResendCount; // This is the seqNo of the ack(s), aka resend count
                 int8_t rxPacketSNR;     // SNR that the other side received our packet with
         } ackPacket_t;
-#define ACK_PKTLEN_BYTES (CHIPID_LEN_BYTES + 5)
+#define ACK_PKTLEN_BYTES (2 + 1 + 1 + 1)
 
         typedef struct
         {
@@ -63,7 +63,7 @@ extern "C"
                 uint8_t ackResendCount; // How many times they have repeated this ACK to us
 
         } ackAckPacket_t;
-#define ACKACK_PKTLEN_BYTES (CHIPID_LEN_BYTES + 9)
+#define ACKACK_PKTLEN_BYTES (2 + 2 + 1 + 1 + 1 + 1)
 
         typedef struct
         {
