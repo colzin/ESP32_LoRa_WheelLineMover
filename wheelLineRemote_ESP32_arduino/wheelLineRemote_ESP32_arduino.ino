@@ -65,19 +65,19 @@ void setup()
   packetParser_init(globalInts_getChipIDU64());
   // Set our destination ID
   // // bc 7f 43 fa 12 f4
-  // g_destID[0] = 0xbc;
-  // g_destID[1] = 0x7f;
-  // g_destID[2] = 0x43;
-  // g_destID[3] = 0xfa;
-  // g_destID[4] = 0x12;
-  // g_destID[5] = 0xf4;
-  // 34 f2 69 33 e8 64
-  g_destID[0] = 0x34;
-  g_destID[1] = 0xf2;
-  g_destID[2] = 0x69;
-  g_destID[3] = 0x33;
-  g_destID[4] = 0xe8;
-  g_destID[5] = 0x64;
+  g_destID[0] = 0xbc;
+  g_destID[1] = 0x7f;
+  g_destID[2] = 0x43;
+  g_destID[3] = 0xfa;
+  g_destID[4] = 0x12;
+  g_destID[5] = 0xf4;
+  // // 34 f2 69 33 e8 64
+  // g_destID[0] = 0x34;
+  // g_destID[1] = 0xf2;
+  // g_destID[2] = 0x69;
+  // g_destID[3] = 0x33;
+  // g_destID[4] = 0xe8;
+  // g_destID[5] = 0x64;
 
   Serial.print("Destination (other end) ID: 0x ");
   for (uint8_t i = 0; i < CHIPID_LEN_BYTES; i++)
