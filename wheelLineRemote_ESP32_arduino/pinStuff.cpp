@@ -20,7 +20,8 @@
  ******************************************************************************/
 
 // GPIOs for buttons
-#define BUTTON_START_PIN 0 // GPIO0 is 0, pin 8 on J2. Also USER_KEY on dev board, and must be high to boot.
+// GPIO0 is 0, pin 8 on J2. Also USER_KEY on dev board, and must be high to boot. Don't use this one, it's glitchy
+#define BUTTON_START_PIN 26 // p26 is labeled 15
 #define BUTTON_FWD_PIN 33
 #define BUTTON_REV_PIN 34
 
