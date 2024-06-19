@@ -95,7 +95,7 @@ esp_err_t i2c1_readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t *pData, uint3
         return ret;
     }
     size_t readCount = 0;
-    ret = i2cRead(I2C1_I2C_NUM, devAddr, pData, len, 100, &readCount);
+    ret = i2cRead(I2C1_I2C_NUM, devAddr, pData, len, 2 * len, &readCount);
     if (ESP_OK != ret)
     {
         Serial.printf("i2c1_readByte Error 0x%x reading byte\n", ret);
@@ -103,7 +103,7 @@ esp_err_t i2c1_readBytes(uint8_t devAddr, uint8_t regAddr, uint8_t *pData, uint3
     }
     if (len != readCount)
     {
-        Serial.printf("Tried to read 1 byte, read %d\n", readCount);
+        Serial.printf("Tried to read %d bytes, read %d\n", len, readCount);
         return ESP_FAIL;
     }
     return ret;

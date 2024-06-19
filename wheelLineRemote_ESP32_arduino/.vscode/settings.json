@@ -3,7 +3,8 @@
         "i2c1.h": "c",
         "array": "cpp",
         "string": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "cmath": "cpp"
     },
 
     "C_Cpp.files.exclude": {

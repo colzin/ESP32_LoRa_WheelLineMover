@@ -90,7 +90,9 @@ static bool enqueuePacket(uint8_t *pkt, uint32_t len, packetType_t packetType)
             memcpy(&g_txSlots[i].pBuffer, pkt, len);
             g_txSlots[i].size = len;
             g_txSlots[i].type = packetType;
-            // Serial.printf("Filled Tx slot %d with type %d, len %d\n", i, packetType, len);
+#if (PARSER_VERBOSITY > 3)
+            Serial.printf("Filled Tx slot %d with type %d, len %d\n", i, packetType, len);
+#endif // #if (PARSER_VERBOSITY > 3)
             return true;
         }
     }
@@ -164,7 +166,9 @@ static void parseAckPacket(rxPacket_t *pkt)
     g_receivedAckSNR = pkt->rxSNR;
     // TODO trigger send of ACKACK packet
     g_shouldAckAck = true;
+#if (PARSER_VERBOSITY > 0)
     Serial.printf("Parsed ack at %d\n", millis());
+#endif // #if (PARSER_VERBOSITY > 0)
 }
 
 static void parseAckAckPacket(rxPacket_t *pkt)
@@ -188,8 +192,9 @@ static void parseAckAckPacket(rxPacket_t *pkt)
 #if PACKET_PRINT_TO_OLED
     // oledStuff_printAckAckPacket(pkt, &ackAckData); Too verbose
 #endif // #if PACKET_PRINT_TO_OLED
-
+#if (PARSER_VERBOSITY > 0)
     Serial.printf("Parsed ackAck at %d\n", millis());
+#endif // #if (PARSER_VERBOSITY > 0)
 }
 
 static void parseMachstateV1Packet(rxPacket_t *pkt)
@@ -200,7 +205,9 @@ static void parseMachstateV1Packet(rxPacket_t *pkt)
     pkt->pData = ReadBEUint8(pkt->pData, &data.seqNo);
     pkt->pData = ReadBEUint8(pkt->pData, &data.machState);
     g_lastV1PacketRx_ms = millis();
+#if (PARSER_VERBOSITY > 0)
     Serial.printf("Rx Seq no %d, Machine state %d at %d\n", data.seqNo, data.machState, g_lastV1PacketRx_ms);
+#endif // #if (PARSER_VERBOSITY > 0)
     // Ignore on Remote, we are not a Driver
     g_lastMachStateV1Header = *pkt; // Copy the header into last received
 }
@@ -240,7 +247,9 @@ void packetParser_parseLoRaData(const uint8_t *pData, uint16_t dataLen, const in
     // rxPacket.pData has now been advanced to start of packet data
 
     dataLen -= PACKET_HEADER_NUMBYTES; // Subtract the header bytes to let len equal the number of bytes remaining
+#if (PARSER_VERBOSITY > 0)
     Serial.printf("packet type %d, RSSI %d, SNR %d, len %d: ", thisRXPkt.pktType, thisRXPkt.rxRSSI, thisRXPkt.rxSNR, dataLen);
+#endif // #if (PARSER_VERBOSITY > 0)
     switch ((packetType_t)thisRXPkt.pktType)
     {
     case packetType_ack:
@@ -311,10 +320,14 @@ static void sendAckPacket(void)
     bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), packetType_ack);
     if (ret)
     {
+#if (PARSER_VERBOSITY > 0)
         Serial.printf("Enqueued ack packet at %d\n", millis());
-        // Serial.print(" to ");
-        // printID(g_idToAck, false);
-        // Serial.printf(", seq no %d, received with RSSI %d, SNR %d\n", g_lastMachStateV1Header.seqNo, g_lastMachStateV1Header.rxRSSI, g_lastMachStateV1Header.rxSNR);
+#if (PARSER_VERBOSITY > 1)
+        Serial.print(" to ");
+        printID(g_idToAck, false);
+        Serial.printf(", seq no %d, received with RSSI %d, SNR %d\n", g_lastMachStateV1Header.seqNo, g_lastMachStateV1Header.rxRSSI, g_lastMachStateV1Header.rxSNR);
+#endif // #if (PARSER_VERBOSITY > 1)
+#endif // #if (PARSER_VERBOSITY > 0)
     }
 }
 
@@ -338,10 +351,14 @@ static void sendAckAckPacket(int16_t ackRxRSSI, int8_t ackRxSNR)
     bool ret = enqueuePacket(txPacket, (uint32_t)(ptr - txPacket), packetType_ackAck);
     if (ret)
     {
+#if (PARSER_VERBOSITY > 0)
         Serial.printf("Enqueued AckAck packet at %d\n", millis());
-        // Serial.print(" to ");
-        // printID(g_idToAckAck, false);
-        // Serial.printf(", seqNoToAck %d, ACK retries %d, ACK RX RSSI %d, their RSSI %d\n", g_receivedAckData.seqNoToAck, g_receivedAckData.ackResendCount, ackRxRSSI, g_receivedAckData.rxPacketRSSI);
+#if (PARSER_VERBOSITY > 1)
+        Serial.print(" to ");
+        printID(g_idToAckAck, false);
+        Serial.printf(", seqNoToAck %d, ACK retries %d, ACK RX RSSI %d, their RSSI %d\n", g_receivedAckData.seqNoToAck, g_receivedAckData.ackResendCount, ackRxRSSI, g_receivedAckData.rxPacketRSSI);
+#endif // #if (PARSER_VERBOSITY > 1)
+#endif // #if (PARSER_VERBOSITY > 0)
     }
 }
 
@@ -421,7 +438,9 @@ void packetParser_poll(void)
             if (g_lastSendError != sendRet)
             {
                 g_lastSendErrPrint_ms = millis();
+#if (PARSER_VERBOSITY > 0)
                 Serial.printf(" Slot %d, type %d, length %d sendRet %s at %d\n", i, g_txSlots[i].type, g_txSlots[i].size, g_sendErrors[sendRet], g_lastSendErrPrint_ms);
+#endif // #if (PARSER_VERBOSITY > 0)
                 g_lastSendError = sendRet;
             }
 #endif // #if SEND_ERR_PRINT_ITVL_MS

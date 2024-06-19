@@ -28,4 +28,7 @@ void globalInts_setMachineState(machineState_t st);
 uint64_t globalInts_getChipIDU64(void);
 void globalInts_setChipIDU64(uint64_t chipID);
 
+int8_t globalInts_getNumRotations(void);
+void globalInts_setNumRotations(int8_t num);
+
 #endif /* SRC_GLOBALINTS_H_ */

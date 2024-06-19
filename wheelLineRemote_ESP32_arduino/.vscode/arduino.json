@@ -2,7 +2,7 @@
     "sketch": "wheelLineRemote_ESP32_arduino.ino",
     "configuration": "LoopCore=0,EventsCore=0,CPUFreq=80,UploadSpeed=921600,DebugLevel=debug,LORAWAN_REGION=3,LoRaWanDebugLevel=2,LORAWAN_DEVEUI=1,LORAWAN_PREAMBLE_LENGTH=0",
     "board": "Heltec-esp32:esp32:WIFI_LoRa_32_V3",
-    "port": "COM10",
+    "port": "COM4",
     "output": "build",
     "programmer": "esptool"
 }

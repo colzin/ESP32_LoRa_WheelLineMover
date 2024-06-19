@@ -64,7 +64,9 @@
 
 #define MSEC_TO_RESET_RX 32000 // Probes should report every 30 sec
 
-#define LORA_VERBOSITY 3 // 0=none, 1=some, 2=more
+#define LORA_VERBOSITY 0 // 0=none, 1=some, 2=more
+
+#define REG_DUMP_POLL_ITVL_MS 0 // nonzero to dump regs periodically
 
 typedef enum
 {
@@ -76,6 +78,13 @@ typedef enum
 /*******************************************************************************
  * Variables
  ******************************************************************************/
+
+#if REG_DUMP_POLL_ITVL_MS
+#define REG_DUMP_NUM_REGS 0xFF
+uint32_t g_lastRegDump_ms;
+uint16_t g_lastRegdumpAddr;
+#include "utils.h"
+#endif // #if REG_DUMP_POLL_ITVL_MS
 
 static int16_t g_currentTxdBm;
 static packetType_t g_txPacketType;
@@ -187,7 +196,9 @@ static void setExpectedReply(packetType_t packetType)
         g_expectedReply = expect_nothing;
         break;
     }
-    // Serial.printf("Setting g_expectedReply to %s\n", expectedReplies[g_expectedReply]);
+#if (LORA_VERBOSITY > 4)
+    Serial.printf("Setting g_expectedReply to %s\n", expectedReplies[g_expectedReply]);
+#endif // #if (LORA_VERBOSITY > 4)
 }
 
 static void onTxDone(void)
@@ -198,18 +209,20 @@ static void onTxDone(void)
     { // Driver will Rx, Remote will sleep here
         Radio.Sleep();
         pinStuff_setLED(led_off); // Turn off when done
+#if (LORA_VERBOSITY > 0)
         Serial.printf("TxDone, sleep at %d\n", millis());
-        // Driver does this	    // Since we are hub, always Rx indefinitely to listen to ACKs or other senders
-        // Driver does this	    Radio.Rx(0); // Rx forever for next packet
-        // Driver does this	    pinStuff_setLED(led_weak); // Turn off when done
+#endif // #if (LORA_VERBOSITY > 0)
+       // Driver does this	    // Since we are hub, always Rx indefinitely to listen to ACKs or other senders
+       // Driver does this	    Radio.Rx(0); // Rx forever for next packet
+       // Driver does this	    pinStuff_setLED(led_weak); // Turn off when done
     }
     else
     {
         Radio.Rx(AWAIT_ACK_MS);    // Rx for reply. Timeout doesn't seem to work.
         pinStuff_setLED(led_weak); // Turn weak for RX
-#if (LORA_VERBOSITY > 1)
+#if (LORA_VERBOSITY > 0)
         Serial.printf("TxDone, SRX for %d at %d: expecting %s\n", AWAIT_ACK_MS, millis(), expectedReplies[g_expectedReply]);
-#endif // #if (LORA_VERBOSITY > 1)
+#endif // #if (LORA_VERBOSITY > 0)
         g_expectingReplyStart_ms = millis();
     }
 }
@@ -224,6 +237,7 @@ static void onTxTimeout(void)
     g_expectedReply = expect_nothing;
 }
 
+#if REG_DUMP_POLL_ITVL_MS
 static void dumpRegs(uint16_t startAddr, uint16_t len)
 {
     uint8_t regVals[len];
@@ -234,6 +248,7 @@ static void dumpRegs(uint16_t startAddr, uint16_t len)
         Serial.printf("0x%04x, 0x%02x\n", startAddr + i, regVals[i]);
     }
 }
+#endif // #if REG_DUMP_POLL_ITVL_MS
 
 void loraStuff_initRadio(void)
 {
@@ -254,14 +269,6 @@ void loraStuff_initRadio(void)
     pinStuff_setLED(led_off); // Turn off when not RX or TX
     g_expectedReply = expect_nothing;
 }
-
-#define REG_DUMP_POLL_ITVL_MS 0
-#if REG_DUMP_POLL_ITVL_MS
-#define REG_DUMP_NUM_REGS 0xFF
-uint32_t g_lastRegDump_ms;
-uint16_t g_lastRegdumpAddr;
-#include "utils.h"
-#endif // #if REG_DUMP_POLL_ITVL_MS
 
 void loraStuff_radioPoll(void)
 {
@@ -289,14 +296,18 @@ void loraStuff_radioPoll(void)
         if (utils_elapsedU32Ticks(g_lastRadioReset_ms, ms_now) > MSEC_TO_RESET_RX)
         {
             RadioState_t preSleepState = Radio.GetStatus();
+#if (LORA_VERBOSITY > 0)
             Serial.printf("Radio status %d. Has been over %d ms since last rx. Sleeping then resetting Rx\n", preSleepState, MSEC_TO_RESET_RX);
+#endif // #if (LORA_VERBOSITY > 0)
             Radio.Sleep();
             pinStuff_setLED(led_off); // Turn off when not RX or TX
             RadioState_t sleepState = Radio.GetStatus();
             Radio.Rx(0);
             pinStuff_setLED(led_weak); // Turn weak for RX
             RadioState_t rxState = Radio.GetStatus();
+#if (LORA_VERBOSITY > 0)
             Serial.printf("State at start: %d. After sleep command: %d. After Rx: %d\n", preSleepState, sleepState, rxState);
+#endif // #if (LORA_VERBOSITY > 0)
             g_lastRadioReset_ms = ms_now;
         }
     }
@@ -347,11 +358,13 @@ void loraStuff_adjustTxPwr(int16_t theirRSSI)
     {
         // Serial.println("About to adjust TX power, standby radio:");
         // delay(1);
-        // add current setting to get next desired setting, floor at -9 and ceiling at +22 for  1262
+        // add current setting to get next desired setting, floor at -9 and ceiling at +22 for SX1262
         Radio.Standby(); // Put radio into standby, then set TX power
         // Set power, which is an int8
         g_currentTxdBm = SX126xSetTxParams((int8_t)newDesiredTxPower, RADIO_RAMP_200_US);
+#if (LORA_VERBOSITY > 0)
         Serial.printf("  CHANGED LoRa TX PWR %d to %d because their RSSI was %d\n", oldTxdBm, g_currentTxdBm, theirRSSI);
+#endif // #if (LORA_VERBOSITY > 0)
     }
 }
 
@@ -371,7 +384,9 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len, packetType_t packetType)
     {
         if (utils_elapsedU32Ticks(g_expectingReplyStart_ms, millis()) < AWAIT_ACK_MS)
         {
-            // Serial.println("Expecting reply, wait"); Happens all the time
+#if (LORA_VERBOSITY > 5)
+            Serial.println("Expecting reply, wait"); // Happens all the time
+#endif                                               // #if (LORA_VERBOSITY > 5)
             return sendFail_awaitingReply;
         }
         else
@@ -401,9 +416,11 @@ sendFail_t loraStuff_send(uint8_t *txPtr, uint32_t len, packetType_t packetType)
         return sendFail_txAlreadyRunning;
         break;
     case RF_RX_RUNNING:
-        // Check above if we are awaiting a reply, no matter what mode we are in at the moment.
-        // If here, we know we are not awaiting a reply, so we can change modes.
+// Check above if we are awaiting a reply, no matter what mode we are in at the moment.
+// If here, we know we are not awaiting a reply, so we can change modes.
+#if (LORA_VERBOSITY > 1)
         Serial.printf("  Sleeping radio to send: ");
+#endif // #if (LORA_VERBOSITY > 1)
         Radio.Sleep();
         pinStuff_setLED(led_off); // Turn off when not RX or TX
         radioState = Radio.GetStatus();

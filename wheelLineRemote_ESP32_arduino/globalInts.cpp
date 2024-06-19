@@ -21,6 +21,8 @@
 static machineState_t m_machState;
 
 static uint64_t g_chipID;
+
+static int8_t g_numRotations;
 /*************************************************************************************
  *  Prototypes
  ************************************************************************************/
@@ -62,8 +64,20 @@ uint64_t globalInts_getChipIDU64(void)
 {
     return g_chipID;
 }
-
 void globalInts_setChipIDU64(uint64_t chipID)
 {
     g_chipID = chipID;
+}
+
+int8_t globalInts_getNumRotations(void)
+{
+    return g_numRotations;
+}
+void globalInts_setNumRotations(int8_t num)
+{
+    if (num != g_numRotations)
+    {
+        Serial.printf("\nChanged revs from %d to %d\n", g_numRotations, num);
+    }
+    g_numRotations = num;
 }
