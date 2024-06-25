@@ -138,7 +138,7 @@ void oledStuff_printMachStateV1Packet(rxPacket_t *pRxPacket, machStateV1Packet_t
   // Third line
   char str[MAX_SCREEN_WIDTH_CHARS + 1];
   uint32_t index = 0;
-  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "st: %d ", pData->machState);
+  index += snprintf(str + index, MAX_SCREEN_WIDTH_CHARS - index, "st: %d ", globalInts_getMachStateString((machineState_t)pData->machState));
   str[index] = 0;
   // Serial.printf("%s,\n", str);
   displayInstance.drawString(0, 32, str);
@@ -169,25 +169,25 @@ static void battMachStatePrint(void)
   displayInstance.drawString(0, 16, str);
 
   // Third line, machine state
-  index = sprintf(str, "State:%d,seq %d", globalInts_getMachineState(), packetParser_getLastTxSeqNo());
+  index = sprintf(str, "State: %s,%d", globalInts_getMachStateString(globalInts_getMachineState()), globalInts_getNumRotations());
   str[index] = 0;
   displayInstance.drawString(0, 32, str);
 
   // Fourth line, LoRa stats
-  index = snprintf(str, sizeof(str), "Tx Pwr:%d, ", loraStuff_getCurrentTxdBm());
+  index = snprintf(str, sizeof(str), "Tx%04d P:%d, ", packetParser_getLastTxSeqNo(), loraStuff_getCurrentTxdBm());
   switch (loraStuff_getRadioState())
   {
   case LoRa_IDLE:
     index += snprintf(str + index, sizeof(str) - index, "idle");
     break;
   case LoRa_RX:
-    index += snprintf(str + index, sizeof(str) - index, " RX ");
+    index += snprintf(str + index, sizeof(str) - index, "  RX");
     break;
   case LoRa_TX:
-    index += snprintf(str + index, sizeof(str) - index, " TX ");
+    index += snprintf(str + index, sizeof(str) - index, "  TX");
     break;
   case LoRa_CAD:
-    index += snprintf(str + index, sizeof(str) - index, "CAD ");
+    index += snprintf(str + index, sizeof(str) - index, " CAD");
     break;
   }
   str[index] = 0;

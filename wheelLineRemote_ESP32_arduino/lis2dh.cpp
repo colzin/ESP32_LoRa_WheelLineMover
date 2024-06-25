@@ -369,7 +369,21 @@ static uint32_t m_rollingSampleWriteIndex;
 #endif // #if NUM_ROLLING_BUFFERS
 
 #if NUM_PREVIOUS_ANGLES
-static int32_t m_previousAngles[NUM_PREVIOUS_ANGLES];
+
+// #define MOVING_MIN_DEG_PER_MIN 1 // Minimum speed to be considered moving
+static uint32_t m_lastRollover_ms;
+#define PRE_STOP_DEGREES 3 // How many degrees short of top to stop, to account for actuator delay in turning off.
+#define POST_STOP_GRACE_DEGREES 35
+typedef struct
+{
+    int32_t angle_degree;
+    uint32_t time_ms;
+    int32_t speedFromPrevious;
+} angleTimestamp_t;
+static angleTimestamp_t m_previousAngles[NUM_PREVIOUS_ANGLES];
+
+#define ROLLOVER_LOCKOUT_MS 10000 // How many ms minimum before we can roll over again, TODO Tune
+
 #endif // #if NUM_PREVIOUS_ANGLES
 
 #if NUM_PREVIOUS_Z_COUNTS
@@ -557,7 +571,7 @@ static esp_err_t runSelfTest(void)
     {
         readSingleSample(&x0, &y0, &z0);
         uint8_t timeout = 5;
-        while (!isDataReady())
+        while (!isDataReady() && timeout)
         {
             delay(2); // At 400Hz, sample should be ready in 2.5ms
             timeout--;
@@ -573,7 +587,7 @@ static esp_err_t runSelfTest(void)
     {
         readSingleSample(&x1, &y1, &z1);
         uint8_t timeout = 5;
-        while (!isDataReady())
+        while (!isDataReady() && timeout)
         {
             delay(2); // At 400Hz, sample should be ready in 2.5ms
             timeout--;
@@ -590,7 +604,7 @@ static esp_err_t runSelfTest(void)
     {
         readSingleSample(&xNorm, &yNorm, &zNorm);
         uint8_t timeout = 5;
-        while (!isDataReady())
+        while (!isDataReady() && timeout)
         {
             delay(3); // At 400Hz, sample should be ready in 2.5ms
             timeout--;
@@ -777,7 +791,7 @@ static void findMinMaxAverage(int16_t *pConvertedSamples, samplesStruct_t *p)
     p->avgZ_128x = (int32_t)avgZ;
 
     // Serial.printf("%d Sample min:     %d,\t%d,\t%d\n", p->numSamples, minX, minY, minZ);
-    Serial.printf("%d Sample average: %d.%d, %d.%d, %d.%d\n", p->numSamples, p->avgX_128x >> 7, p->avgX_128x & 0x7F, p->avgY_128x >> 7, p->avgY_128x & 0x7F, p->avgZ_128x >> 7, p->avgZ_128x & 0x7F);
+    // Serial.printf("%d Sample average: %d.%d, %d.%d, %d.%d.  ", p->numSamples, p->avgX_128x >> 7, p->avgX_128x & 0x7F, p->avgY_128x >> 7, p->avgY_128x & 0x7F, p->avgZ_128x >> 7, p->avgZ_128x & 0x7F);
     // Serial.printf("%d Sample max:     %d,\t%d,\t%d\n", p->numSamples, maxX, maxY, maxZ);
 }
 
@@ -807,10 +821,6 @@ static void findSmoothedPoints(int16_t *pX, int16_t *pY, int16_t *pZ)
 #endif // #if NUM_ROLLING_BUFFERS
 
 #if NUM_PREVIOUS_ANGLES
-
-static int32_t fixAngle(int32_t angle128th, int32_t xCounts128th, int32_t zCounts128th)
-{
-}
 static int32_t findAngle_xzAxis(int32_t xCounts_128th, int32_t zCounts_128th)
 {
     /* See https://www.digikey.com/en/articles/using-an-accelerometer-for-inclination-sensing
@@ -864,6 +874,183 @@ static int32_t findAngle_xzAxis(int32_t xCounts_128th, int32_t zCounts_128th)
             return (int32_t)(theta);
         }
     }
+}
+
+// Angles can wrap around 360
+static int32_t findAngleDiff_deg(int32_t angle1, int32_t angle2)
+{
+    // Consider a wrap-around if angle1 is greater than 350 and angle2 is less than 10
+    if (angle1 > 315 && angle2 < 45)
+    {
+        int32_t diff = 360 - angle1;
+        diff += angle2;
+        return diff;
+    }
+    // Consider a wrap-around if angle2 is greater than 350 and angle1 is less than 10
+    if (angle2 > 315 && angle1 < 45)
+    {
+        int32_t diff = 360 - angle2;
+        diff += angle1;
+        return -diff;
+    }
+    // Default case, just subtract to get difference
+    return angle2 - angle1;
+}
+
+// Find speed in degrees per minute
+static int32_t findLatestSpeed_degPerMin(angleTimestamp_t *pLatest, angleTimestamp_t *pOlder)
+{
+    if (0 == pLatest || 0 == pOlder)
+    {
+        Serial.printf("Need multiple angles to calculate speeds");
+        return 0;
+    }
+    // Make an array less one of the points
+    int32_t angleDiff_deg = findAngleDiff_deg(pOlder->angle_degree, pLatest->angle_degree);
+    int32_t timeDiff_ms = utils_elapsedU32Ticks(pOlder->time_ms, pLatest->time_ms);
+
+    if (timeDiff_ms)
+    { /* Calculate in degree per minute:
+       * deg/ms to deg/min: multiply deg by 1000 to get to sec, 60 to get to min
+       * Divide last to perserve data bits.
+       */
+        return (angleDiff_deg * 60000) / timeDiff_ms;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+static bool isRolloverLockedOut(uint32_t ms_now)
+{
+    return (utils_elapsedU32Ticks(m_lastRollover_ms, ms_now) >= ROLLOVER_LOCKOUT_MS ? false : true);
+}
+
+static void doAngleMath(int32_t xCounts_128ths, int32_t zCounts_128ths)
+{
+    // find roll angle.
+    angleTimestamp_t thisAngle;
+    thisAngle.angle_degree = findAngle_xzAxis(xCounts_128ths, zCounts_128ths);
+    thisAngle.time_ms = millis();
+    thisAngle.speedFromPrevious = findLatestSpeed_degPerMin(&thisAngle, &m_previousAngles[0]);
+    Serial.printf("%d angles, Most recent: %d, speed: %d. ", NUM_PREVIOUS_ANGLES + 1, thisAngle.angle_degree, thisAngle.speedFromPrevious);
+    // for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
+    // {
+    //     Serial.printf("%d,  ", m_previousAngles[i].angle_degree, m_previousAngles[i].speedFromPrevious);
+    // }
+    // Serial.printf("\n");
+    // Traverse the array, use slopes and angles to determine if we are close to the end of a revolution
+    int32_t avgSpeed = 0;
+    avgSpeed += thisAngle.speedFromPrevious;
+    for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
+    {
+        avgSpeed += m_previousAngles[i].speedFromPrevious;
+    }
+    avgSpeed /= NUM_PREVIOUS_ANGLES + 1; // num angles plus our latest sample
+    // Find average angle
+    int32_t avgAngle = 0;
+    avgAngle += thisAngle.angle_degree;
+    for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
+    {
+        avgAngle += m_previousAngles[i].angle_degree;
+    }
+    avgAngle /= NUM_PREVIOUS_ANGLES + 1; // Old array plus most recent sample
+    // See if we are considered as moving
+    machineState_t currentState = globalInts_getMachineState();
+    if (machState_runEngineHydRev == currentState)
+    {
+        // if (avgSpeed >= MOVING_MIN_DEG_PER_MIN)
+        // { // If speed is positive, see if we are close to 360
+        int32_t angleFrom360 = findAngleDiff_deg(avgAngle, 360);
+        Serial.printf("CCW/REV direction, angleFrom360 %d, avgSpeed %d (should be positive), avgAngle %d. ", angleFrom360, avgSpeed, avgAngle);
+        // Count up to 360. Difference from 360 will shrink when about to roll over. Don't try to trigger once it goes negative again though!
+        if (-POST_STOP_GRACE_DEGREES <= angleFrom360 && PRE_STOP_DEGREES > angleFrom360)
+        {
+            if (0 > avgSpeed)
+            {
+                Serial.printf("Ignoring possible rollover because thisSpeed < 0\n");
+            }
+            else
+            {
+                if (isRolloverLockedOut(thisAngle.time_ms))
+                {
+                    Serial.printf("Ignoring possible CCW/REV rollover at %d, only %d since last rollover\n", utils_elapsedU32Ticks(m_lastRollover_ms, thisAngle.time_ms));
+                }
+                else
+                { // Decrement the number of revolutions til we are done.
+                    Serial.printf("Detected CCW/REV rollover at %d: ", thisAngle.time_ms);
+                    int8_t rots = globalInts_getNumRotations();
+                    rots++; // Increase for each reverse rotation completed
+                    globalInts_setNumRotations(rots);
+                    if (0 == rots)
+                    {
+                        Serial.println("IDLING ENGINE due to no more revs");
+                        globalInts_setMachineState(machState_runEngineHydIdle);
+                    }
+                    m_lastRollover_ms = thisAngle.time_ms;
+                }
+            }
+        }
+        else
+        {
+            Serial.printf("\n");
+        }
+        // }
+    }
+    else if (machState_runEngineHydFwd == currentState)
+    {
+        // if (avgSpeed <= -MOVING_MIN_DEG_PER_MIN)
+        // {
+        int32_t angleFrom0 = findAngleDiff_deg(0, avgAngle);
+        Serial.printf("CW/FWD direction, angleFrom0 %d, avgSpeed %d (should be negative), avgAngle %d. ", angleFrom0, avgSpeed, avgAngle);
+        // Count down to 0 degrees
+        if (-POST_STOP_GRACE_DEGREES <= angleFrom0 && PRE_STOP_DEGREES > angleFrom0)
+        {
+            if (0 < avgSpeed)
+            {
+                Serial.printf("Ignoring possible rollover because thisSpeed > 0\n");
+            }
+            else
+            {
+                if (isRolloverLockedOut(thisAngle.time_ms))
+                {
+                    Serial.printf("Ignoring possible CW/FWD rollover, only %d since last rollover\n", utils_elapsedU32Ticks(m_lastRollover_ms, thisAngle.time_ms));
+                }
+                else
+                { // Decrement the number of revolutions til we are done.
+                    Serial.printf("Detected CW/FWD rollover at %d, angleFrom0 %d: ", thisAngle.time_ms, angleFrom0);
+                    int8_t rots = globalInts_getNumRotations();
+                    rots--; // Decrease for each forward rotation completed
+                    globalInts_setNumRotations(rots);
+                    if (0 == rots)
+                    {
+                        Serial.println("IDLING ENGINE due to no more revs");
+                        globalInts_setMachineState(machState_runEngineHydIdle);
+                    }
+                    m_lastRollover_ms = thisAngle.time_ms;
+                }
+            }
+        }
+        else
+        {
+            Serial.printf("\n");
+        }
+        // }
+    }
+    else
+    { // Not in FWD or REV. Set rollover lockout timer to now
+        // Set to now to lock out wobble on start of revolution
+        m_lastRollover_ms = thisAngle.time_ms;
+    }
+
+    // Bubble the samples down
+    for (uint32_t i = NUM_PREVIOUS_ANGLES - 1; i > 0; i--)
+    {
+        m_previousAngles[i] = m_previousAngles[i - 1];
+    }
+    // Store the latest at 0
+    m_previousAngles[0] = thisAngle;
 }
 #endif // #if NUM_PREVIOUS_ANGLES
 
@@ -926,24 +1113,7 @@ static void readSamples(void)
 #endif // #if NUM_ROLLING_BUFFERS
 
 #if NUM_PREVIOUS_ANGLES
-    // find roll angle.
-    int32_t thisAngle = findAngle_xzAxis(samps.avgX_128x, samps.avgZ_128x);
-    Serial.printf("%d angles. Most recent:  %d, ", NUM_PREVIOUS_ANGLES + 1, thisAngle);
-    for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
-    {
-        Serial.printf("%d,  ", m_previousAngles[i]);
-    }
-    Serial.printf("\n");
-    // TODO make decisions based on the angles
-    // angleDecision(thisAngle128th, m_previousAngles128th, NUM_PREVIOUS_ANGLES);
-    // Bubble the samples down
-    for (uint32_t i = NUM_PREVIOUS_ANGLES - 1; i > 0; i--)
-    {
-        m_previousAngles[i] = m_previousAngles[i - 1];
-    }
-    // Store the latest at 0
-    m_previousAngles[0] = thisAngle;
-
+    doAngleMath(samps.avgX_128x, samps.avgZ_128x);
 #endif // #if NUM_PREVIOUS_ANGLES
 
 #if NUM_PREVIOUS_Z_COUNTS
@@ -1037,9 +1207,11 @@ void lis2dh_init(void)
 #if NUM_PREVIOUS_ANGLES
     for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
     { // Zero out the ones we haven't used yet
-        m_previousAngles[i] = 0;
+        m_previousAngles[i].angle_degree = 0;
+        m_previousAngles[i].time_ms = 0;
     }
-#endif // #if NUM_PREVIOUS_ANGLES
+    m_lastRollover_ms = millis(); // Set to now to lock out wobble on start of revolution
+#endif                            // #if NUM_PREVIOUS_ANGLES
 
     // pollers_registerPoller(lis2dh12Poll);
 }

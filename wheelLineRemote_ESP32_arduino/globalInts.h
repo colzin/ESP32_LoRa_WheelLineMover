@@ -23,7 +23,9 @@ typedef enum
 } machineState_t;
 
 machineState_t globalInts_getMachineState(void);
+const char* globalInts_getMachStateString(machineState_t st);
 void globalInts_setMachineState(machineState_t st);
+uint32_t globalInts_getMachStateStart_ms(void);
 
 uint64_t globalInts_getChipIDU64(void);
 void globalInts_setChipIDU64(uint64_t chipID);

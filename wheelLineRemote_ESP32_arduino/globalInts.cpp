@@ -19,6 +19,8 @@
 
 // static int32_t m_int32s[GLOBALINTs_NUM_INT32s];
 static machineState_t m_machState;
+static uint32_t m_machStateStart_ms;
+const char *m_machineStateStrings[] = {"PON", "Start", "runIdle", "runFWD", "runREV", "kill"};
 
 static uint64_t g_chipID;
 
@@ -43,21 +45,42 @@ machineState_t globalInts_getMachineState(void)
 {
     return m_machState;
 }
+
+const char *globalInts_getMachStateString(machineState_t st)
+{
+    if (st <= machState_killEngine)
+    {
+        return m_machineStateStrings[st];
+    }
+    return "invalid";
+}
+
 void globalInts_setMachineState(machineState_t st)
 {
     if (st <= machState_killEngine)
     {
         if (st != m_machState)
         {
-            Serial.printf("Machine state from %d to %d\n", m_machState, st);
+            Serial.printf("Machine state from %s to %s\n", globalInts_getMachStateString(m_machState), globalInts_getMachStateString(st));
+        }
+        if (machState_runEngineHydFwd != st && machState_runEngineHydRev != st)
+        {
+            Serial.println("Clearing numRots for machine state that shouldn't move.");
+            globalInts_setNumRotations(0);
         }
         m_machState = st;
     }
     else
     {
-        Serial.printf("Tried to set invalid state %d, setting to kill engine\n", st);
+        Serial.printf("Tried to set invalid state %d, setting to killEngine\n", st);
         m_machState = machState_killEngine;
     }
+    m_machStateStart_ms = millis();
+}
+
+uint32_t globalInts_getMachStateStart_ms(void)
+{
+    return m_machStateStart_ms;
 }
 
 uint64_t globalInts_getChipIDU64(void)
@@ -77,7 +100,7 @@ void globalInts_setNumRotations(int8_t num)
 {
     if (num != g_numRotations)
     {
-        Serial.printf("\nChanged revs from %d to %d\n", g_numRotations, num);
+        Serial.printf("\tChanged revs from %d to %d\n", g_numRotations, num);
     }
     g_numRotations = num;
 }
