@@ -12,6 +12,15 @@
 
 #define LORA 1
 
+#define UNIT_1 0
+#if !UNIT_1
+#define UNIT_2 1
+#if !UNIT_2
+#error "Select the target unit
+#endif // #if !UNIT_2
+
+#endif // #if !UNIT_1
+
 #include "loraStuff.h"
 #define MACHSTATE_SEND_ITVL_MS (MIN_TX_ITVL_MS + 300) // How often to send out the machine state
 

@@ -372,7 +372,7 @@ static uint32_t m_rollingSampleWriteIndex;
 
 // #define MOVING_MIN_DEG_PER_MIN 1 // Minimum speed to be considered moving
 static uint32_t m_lastRollover_ms;
-#define PRE_STOP_DEGREES 3 // How many degrees short of top to stop, to account for actuator delay in turning off.
+#define PRE_STOP_DEGREES 15 // How many degrees short of top to stop, to account for actuator delay in turning off.
 #define POST_STOP_GRACE_DEGREES 35
 typedef struct
 {
@@ -382,7 +382,7 @@ typedef struct
 } angleTimestamp_t;
 static angleTimestamp_t m_previousAngles[NUM_PREVIOUS_ANGLES];
 
-#define ROLLOVER_LOCKOUT_MS 10000 // How many ms minimum before we can roll over again, TODO Tune
+#define ROLLOVER_LOCKOUT_MS 15000 // How many ms minimum before we can roll over again. 30 sec per revolution, 15 sec should be good.
 
 #endif // #if NUM_PREVIOUS_ANGLES
 
@@ -937,7 +937,7 @@ static void doAngleMath(int32_t xCounts_128ths, int32_t zCounts_128ths)
     Serial.printf("%d angles, Most recent: %d, speed: %d. ", NUM_PREVIOUS_ANGLES + 1, thisAngle.angle_degree, thisAngle.speedFromPrevious);
     // for (uint32_t i = 0; i < NUM_PREVIOUS_ANGLES; i++)
     // {
-    //     Serial.printf("%d,  ", m_previousAngles[i].angle_degree, m_previousAngles[i].speedFromPrevious);
+    //     Serial.printf("%d,  %d. ", m_previousAngles[i].angle_degree, m_previousAngles[i].speedFromPrevious);
     // }
     // Serial.printf("\n");
     // Traverse the array, use slopes and angles to determine if we are close to the end of a revolution
@@ -975,7 +975,7 @@ static void doAngleMath(int32_t xCounts_128ths, int32_t zCounts_128ths)
             {
                 if (isRolloverLockedOut(thisAngle.time_ms))
                 {
-                    Serial.printf("Ignoring possible CCW/REV rollover at %d, only %d since last rollover\n", utils_elapsedU32Ticks(m_lastRollover_ms, thisAngle.time_ms));
+                    Serial.printf("Ignoring possible CCW/REV rollover, only %d since last rollover\n", utils_elapsedU32Ticks(m_lastRollover_ms, thisAngle.time_ms));
                 }
                 else
                 { // Decrement the number of revolutions til we are done.
